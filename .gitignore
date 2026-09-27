@@ -17,6 +17,11 @@ build/
 dist/
 *.spec.bak
 
+# Local release binary archives (stored locally & on GitHub Releases, omitted from git tree)
+releases/**/*.exe
+releases/**/*.dll
+releases/*.exe
+
 # Logs and temporary files
 *.log
 *.tmp
