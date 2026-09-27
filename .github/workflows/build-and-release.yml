@@ -26,23 +26,27 @@ jobs:
         with:
           python-version: "3.12"
           cache: "pip"
+          cache-dependency-path: "requirements.txt"
 
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install pyinstaller
+          python -m pip install -r requirements.txt
 
       - name: Compile Native C Acceleration Engine (DLL & CLI)
+        shell: powershell
         run: |
           gcc -O3 -shared -o fastfilter.dll fastfilter.c
-          mkdir -Force dist
+          if (-not (Test-Path "dist")) { New-Item -ItemType Directory -Path "dist" }
           gcc -O3 -DBUILD_CLI -o dist\fastfilter.exe fastfilter.c
 
       - name: Build Standalone GUI Executable (PyInstaller)
+        shell: powershell
         run: |
           python -m PyInstaller --clean -y WordLengthFilter.spec
 
       - name: Verify Compiled Binaries
+        shell: powershell
         run: |
           .\dist\fastfilter.exe --version
           Get-ChildItem -Path .\dist
