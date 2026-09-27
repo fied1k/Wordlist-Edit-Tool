@@ -1,6 +1,6 @@
 # WordLengthFilter ⚡
 
-[![Release](https://img.shields.io/badge/version-v1.2.1-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/version-v1.3.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010%20(x64)-0078D6.svg?logo=windows)](#)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](#)
 [![C Engine](https://img.shields.io/badge/Engine-Native%20C%20(GCC%2016)-00599C.svg?logo=c)](#)
@@ -53,6 +53,9 @@ flowchart TD
 
 - **⚡ Blazing Fast Native C Engine**: Uses 4 MB buffered disk I/O to stream files continuously without loading entire wordlists into memory.
 - **💾 Low Memory Footprint**: Filters 50M+ line wordlists using only ~8–64 MB of RAM (compared to 8–16 GB in pure Python).
+- **📊 Live Progression Indicator**: Real-time determinate progress bar with live percentage and scanned/kept counters to confirm active processing on large files without hanging.
+- **📋 Collapsible Real-Time Status Log**: One-click toggleable log console streaming live timestamped progress, file specs, chunk rollover alerts, and engine telemetry.
+- **📈 Comprehensive Processing Summary**: Detailed post-processing breakdown showing original words, retained words (and percentage), and removed words (and percentage) in both GUI and CLI.
 - **🖥️ Non-Blocking Windows GUI**: Operations run on background worker threads—the UI remains smooth and responsive without freezing.
 - **📁 Destination Folder Selector**: Custom destination directory chooser with automatic fallback to the source file directory.
 - **✂️ Output Splitting & Chunk Rollover**: Divide massive dictionaries into manageable parts (e.g. 5,000,000 words or 1,024 MB per part) on-the-fly **without breaking global deduplication** or doubling disk I/O.

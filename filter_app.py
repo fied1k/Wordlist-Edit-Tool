@@ -1,16 +1,21 @@
 import ctypes
+import datetime
 import os
 import re
 import sys
 import threading
+import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.2.1"
+__version__ = "1.3.0"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
 DLL_PATH = os.path.join(BASE_DIR, "fastfilter.dll")
+
+# Native C progress callback type: void cb(long long scanned, long long kept, long long bytes_read)
+PROGRESS_CB_TYPE = ctypes.CFUNCTYPE(None, ctypes.c_longlong, ctypes.c_longlong, ctypes.c_longlong)
 
 # Attempt to load the native C acceleration engine
 C_FILTER_FUNC = None
@@ -31,6 +36,8 @@ try:
                 ctypes.c_int,      # dedup (0 or 1)
                 ctypes.c_longlong, # split_lines (0=disabled)
                 ctypes.c_longlong, # split_bytes (0=disabled)
+                PROGRESS_CB_TYPE,  # progress_cb
+                ctypes.POINTER(ctypes.c_longlong), # out_scanned
             ]
             C_FILTER_FUNC.restype = ctypes.c_longlong
             C_FILTER_IS_WIDE = True
@@ -46,6 +53,8 @@ try:
                 ctypes.c_int,
                 ctypes.c_longlong,
                 ctypes.c_longlong,
+                PROGRESS_CB_TYPE,
+                ctypes.POINTER(ctypes.c_longlong),
             ]
             C_FILTER_FUNC.restype = ctypes.c_longlong
             C_FILTER_IS_WIDE = False
@@ -83,6 +92,7 @@ class LengthFilterApp:
         self.split_mb_var = tk.StringVar(value="1024")
 
         self.is_processing = False
+        self.log_visible = False
 
         self._build_ui()
 
@@ -90,27 +100,89 @@ class LengthFilterApp:
         self.root.bind("<Return>", lambda event: self._process_file())
 
     def _build_ui(self):
-        # 1. PERMANENT STICKY BOTTOM ACTION BAR (Packed first with side=BOTTOM so it's NEVER hidden)
-        bottom_bar = ttk.Frame(self.root, padding="10 8 10 10", relief="groove")
-        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+        # 1. PERMANENT STICKY BOTTOM CONTAINER (Packed first with side=BOTTOM so it's NEVER hidden)
+        self.bottom_container = ttk.Frame(self.root)
+        self.bottom_container.pack(side=tk.BOTTOM, fill=tk.X)
+
+        # Determinate visual progression bar row
+        progress_frame = ttk.Frame(self.bottom_container, padding="10 6 10 2")
+        progress_frame.pack(fill=tk.X)
+
+        self.progress_bar = ttk.Progressbar(
+            progress_frame, orient="horizontal", mode="determinate", maximum=100.0
+        )
+        self.progress_bar.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 8))
+
+        self.progress_pct_label = ttk.Label(
+            progress_frame, text="0%", font=("Segoe UI", 9, "bold"), width=5, anchor="e"
+        )
+        self.progress_pct_label.pack(side=tk.RIGHT)
+
+        # Bottom action bar with Start button, Log toggle button, and live status label
+        action_bar = ttk.Frame(self.bottom_container, padding="10 4 10 8", relief="groove")
+        action_bar.pack(fill=tk.X)
 
         self.run_btn = ttk.Button(
-            bottom_bar,
+            action_bar,
             text="▶  Start Filtering",
             command=self._process_file,
-            width=22,
+            width=18,
         )
-        self.run_btn.pack(side=tk.LEFT, padx=(4, 12), ipady=5)
+        self.run_btn.pack(side=tk.LEFT, padx=(2, 6), ipady=4)
 
-        engine_info = "Native C Engine (Ultra-Fast)" if C_FILTER_FUNC else "Standard Engine"
+        self.toggle_log_btn = ttk.Button(
+            action_bar,
+            text="📋  Show Log",
+            command=self._toggle_log_view,
+            width=13,
+        )
+        self.toggle_log_btn.pack(side=tk.LEFT, padx=(0, 8), ipady=4)
+
+        engine_info = "Native C Engine" if C_FILTER_FUNC else "Standard Python Engine"
         self.status_label = ttk.Label(
-            bottom_bar,
+            action_bar,
             text=f"Ready ({engine_info}). Select a source file and click Start Filtering.",
             foreground="#333333",
         )
         self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
-        # 2. MAIN CONFIGURATION CONTAINER
+        # 2. COLLAPSIBLE REAL-TIME STATUS & PROGRESS LOG FRAME (Unpacked by default)
+        self.log_container = ttk.LabelFrame(self.root, text="Real-Time Status & Progress Log", padding="6")
+
+        log_toolbar = ttk.Frame(self.log_container)
+        log_toolbar.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(log_toolbar, text="Live Telemetry Stream:", font=("Segoe UI", 8, "italic")).pack(side=tk.LEFT)
+        ttk.Button(log_toolbar, text="Clear Log", width=10, command=self._clear_log).pack(side=tk.RIGHT)
+
+        log_box_frame = ttk.Frame(self.log_container)
+        log_box_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.log_text = tk.Text(
+            log_box_frame,
+            height=7,
+            font=("Consolas", 9),
+            bg="#1e1e1e",
+            fg="#dcdcdc",
+            insertbackground="white",
+            wrap="none",
+        )
+        log_scroll_y = ttk.Scrollbar(log_box_frame, orient="vertical", command=self.log_text.yview)
+        log_scroll_x = ttk.Scrollbar(log_box_frame, orient="horizontal", command=self.log_text.xview)
+        self.log_text.configure(yscrollcommand=log_scroll_y.set, xscrollcommand=log_scroll_x.set)
+
+        self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        log_scroll_y.pack(side=tk.RIGHT, fill=tk.Y)
+        log_scroll_x.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.log_text.tag_config("info", foreground="#80d8ff")
+        self.log_text.tag_config("success", foreground="#69f0ae")
+        self.log_text.tag_config("warn", foreground="#ffd740")
+        self.log_text.tag_config("error", foreground="#ff5252")
+        self.log_text.tag_config("stat", foreground="#ffff8d")
+        self.log_text.tag_config("subtle", foreground="#9e9e9e")
+        self.log_text.config(state="disabled")
+
+        # 3. MAIN CONFIGURATION CONTAINER
         main_container = ttk.Frame(self.root, padding="12 10 12 4")
         main_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
@@ -388,6 +460,52 @@ class LengthFilterApp:
         else:
             self.regex_entry.config(state="disabled")
 
+    def _toggle_log_view(self):
+        if not self.log_visible:
+            self.log_container.pack(
+                side=tk.BOTTOM, fill=tk.BOTH, expand=False, before=self.bottom_container, padx=12, pady=(0, 6)
+            )
+            self.toggle_log_btn.config(text="📋  Hide Log")
+            self.log_visible = True
+            cur_w = self.root.winfo_width()
+            cur_h = self.root.winfo_height()
+            if cur_h < 700:
+                self.root.geometry(f"{max(cur_w, 690)}x740")
+        else:
+            self.log_container.pack_forget()
+            self.toggle_log_btn.config(text="📋  Show Log")
+            self.log_visible = False
+            cur_w = self.root.winfo_width()
+            cur_h = self.root.winfo_height()
+            if cur_h > 600:
+                self.root.geometry(f"{max(cur_w, 690)}x560")
+
+    def _log(self, message, tag="info"):
+        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        formatted = f"[{timestamp}] {message}\n"
+        self.log_text.config(state="normal")
+        self.log_text.insert(tk.END, formatted, tag)
+        self.log_text.see(tk.END)
+        self.log_text.config(state="disabled")
+
+    def _clear_log(self):
+        self.log_text.config(state="normal")
+        self.log_text.delete("1.0", tk.END)
+        self.log_text.config(state="disabled")
+
+    def _update_progress_ui(self, scanned, kept, bytes_read, total_file_size):
+        if not self.is_processing:
+            return
+        pct = min(100.0, (bytes_read / total_file_size * 100.0)) if total_file_size > 0 else 0.0
+        self.progress_bar["value"] = pct
+        self.progress_pct_label.config(text=f"{pct:.0f}%")
+        mb_read = bytes_read / (1024 * 1024)
+        mb_tot = total_file_size / (1024 * 1024)
+        self.status_label.config(
+            text=f"Filtering: {pct:.1f}% ({mb_read:.1f} MB / {mb_tot:.1f} MB) | Scanned: {scanned:,} | Kept: {kept:,}",
+            foreground="#0055d4",
+        )
+
     def _browse_source_file(self):
         chosen_path = filedialog.askopenfilename(
             title="Select Text / Wordlist File",
@@ -397,10 +515,12 @@ class LengthFilterApp:
             self.file_path_var.set(chosen_path)
             if not self.dest_folder_var.get().strip():
                 self.dest_folder_var.set(os.path.dirname(chosen_path))
+            sz_mb = os.path.getsize(chosen_path) / (1024 * 1024)
             self.status_label.config(
-                text=f"Selected: {os.path.basename(chosen_path)} — Click 'Start Filtering' to run.",
+                text=f"Selected: {os.path.basename(chosen_path)} ({sz_mb:.1f} MB) — Click 'Start Filtering' to run.",
                 foreground="#000000",
             )
+            self._log(f"Selected source: {chosen_path} ({sz_mb:.2f} MB)", tag="info")
 
     def _browse_dest_folder(self):
         current_dir = self.dest_folder_var.get().strip()
@@ -415,6 +535,7 @@ class LengthFilterApp:
         )
         if chosen_dir:
             self.dest_folder_var.set(chosen_dir)
+            self._log(f"Selected destination directory: {chosen_dir}", tag="subtle")
 
     def _get_validator(self):
         mode = self.charset_var.get()
@@ -436,14 +557,18 @@ class LengthFilterApp:
                 raise ValueError(f"Invalid custom regular expression:\n{e}")
         return lambda word: True
 
-    def _run_python_filter(self, source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes):
+    def _run_python_filter(
+        self, source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes, progress_cb=None
+    ):
         char_validator = self._get_validator()
         if charset_mode == "ascii_printable":
             word_token_pattern = re.compile(r"\s+")
         else:
             word_token_pattern = re.compile(r"[^\w'-]+")
 
+        total_scanned = 0
         total_kept = 0
+        bytes_read = 0
         seen_words = set()
 
         base, ext = os.path.splitext(output_path)
@@ -471,8 +596,15 @@ class LengthFilterApp:
             with open(source_path, "r", encoding="utf-8", errors="replace") as in_f:
                 if mode == "list":
                     for line in in_f:
+                        bytes_read += len(line.encode("utf-8"))
                         tokens = word_token_pattern.split(line.strip())
                         for token in tokens:
+                            if not token:
+                                continue
+                            total_scanned += 1
+                            if progress_cb and (total_scanned % 50000) == 0:
+                                progress_cb(total_scanned, total_kept, bytes_read)
+
                             clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
                             if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
                                 if dedup:
@@ -487,9 +619,16 @@ class LengthFilterApp:
                                 total_kept += 1
                 else:
                     for line in in_f:
+                        bytes_read += len(line.encode("utf-8"))
                         words = word_token_pattern.split(line.strip())
                         kept_in_line = []
                         for token in words:
+                            if not token:
+                                continue
+                            total_scanned += 1
+                            if progress_cb and (total_scanned % 50000) == 0:
+                                progress_cb(total_scanned, total_kept, bytes_read)
+
                             clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
                             if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
                                 if dedup:
@@ -508,7 +647,10 @@ class LengthFilterApp:
         finally:
             out_f.close()
 
-        return total_kept
+        if progress_cb:
+            progress_cb(total_scanned, total_kept, bytes_read)
+
+        return total_kept, total_scanned
 
     def _process_file(self):
         if self.is_processing:
@@ -581,15 +723,50 @@ class LengthFilterApp:
         mode = self.mode_var.get()
         dedup = bool(self.unique_var.get())
 
+        total_file_size = os.path.getsize(source_path)
+        start_time = time.time()
+
         # Set UI to busy state
         self.is_processing = True
         self.run_btn.config(state="disabled", text="⏳  Filtering... Please wait")
-        self.status_label.config(text="Processing file in background...", foreground="#0055d4")
+        self.progress_bar["value"] = 0.0
+        self.progress_pct_label.config(text="0%")
+        self.status_label.config(text="Initializing filtering engine...", foreground="#0055d4")
+
+        engine_name = "Native C Acceleration (fastfilter.dll)" if (C_FILTER_FUNC and charset_mode in ("all", "letters", "alnum", "ascii_printable")) else "Python Streaming Engine"
+
+        self._log(f"======================================================", tag="info")
+        self._log(f"Starting filter task for '{original_name}' ({total_file_size / (1024*1024):.2f} MB)", tag="info")
+        self._log(f"  • Rules: length {min_len}-{max_len} | charset='{charset_mode}' | unique={dedup}", tag="subtle")
+        if split_lines > 0 or split_bytes > 0:
+            split_info = f"{split_lines:,} words/part" if split_lines > 0 else f"{split_bytes/(1024*1024):.0f} MB/part"
+            self._log(f"  • Split output: Enabled ({split_info})", tag="subtle")
+        self._log(f"  • Engine: {engine_name}", tag="subtle")
+
+        last_update_time = [0.0]
+        last_log_time = [0.0]
+
+        def on_progress(scanned, kept, bytes_read):
+            now = time.time()
+            if now - last_update_time[0] >= 0.05:
+                last_update_time[0] = now
+                self.root.after_idle(self._update_progress_ui, scanned, kept, bytes_read, total_file_size)
+
+            if now - last_log_time[0] >= 1.0:
+                last_log_time[0] = now
+                pct = min(100.0, (bytes_read / total_file_size * 100.0)) if total_file_size > 0 else 0.0
+                mb_read = bytes_read / (1024 * 1024)
+                self.root.after_idle(
+                    self._log,
+                    f"Progress: {pct:.1f}% | Scanned: {scanned:,} | Kept: {kept:,} | Read: {mb_read:.1f} MB",
+                    "subtle",
+                )
 
         # Worker thread for smooth non-blocking UI
         def worker():
             err = None
             total_kept = 0
+            total_scanned = 0
             try:
                 if C_FILTER_FUNC and charset_mode in ("all", "letters", "alnum", "ascii_printable"):
                     c_mode = 0 if mode == "list" else 1
@@ -603,8 +780,23 @@ class LengthFilterApp:
                         c_charset = 0
                     c_dedup = 1 if dedup else 0
 
+                    c_cb = PROGRESS_CB_TYPE(on_progress)
+                    c_scanned = ctypes.c_longlong(0)
+
                     if C_FILTER_IS_WIDE:
-                        res = C_FILTER_FUNC(source_path, output_path, min_len, max_len, c_charset, c_mode, c_dedup, split_lines, split_bytes)
+                        res = C_FILTER_FUNC(
+                            source_path,
+                            output_path,
+                            min_len,
+                            max_len,
+                            c_charset,
+                            c_mode,
+                            c_dedup,
+                            split_lines,
+                            split_bytes,
+                            c_cb,
+                            ctypes.byref(c_scanned),
+                        )
                     else:
                         res = C_FILTER_FUNC(
                             source_path.encode("utf-8"),
@@ -616,49 +808,81 @@ class LengthFilterApp:
                             c_dedup,
                             split_lines,
                             split_bytes,
+                            c_cb,
+                            ctypes.byref(c_scanned),
                         )
 
                     if res < 0:
                         raise RuntimeError(f"Native engine failed with error code {res}")
                     total_kept = res
+                    total_scanned = c_scanned.value
                 else:
-                    total_kept = self._run_python_filter(
-                        source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes
+                    total_kept, total_scanned = self._run_python_filter(
+                        source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes, progress_cb=on_progress
                     )
             except Exception as e:
                 err = str(e)
 
-            self.root.after(0, lambda: self._on_complete(err, total_kept, output_filename, dest_dir, split_lines > 0 or split_bytes > 0))
+            elapsed_time = time.time() - start_time
+            self.root.after(0, lambda: self._on_complete(
+                err, total_kept, total_scanned, output_filename, dest_dir, split_lines > 0 or split_bytes > 0, elapsed_time, total_file_size
+            ))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_complete(self, err, total_kept, output_filename, directory, was_split):
+    def _on_complete(self, err, total_kept, total_scanned, output_filename, directory, was_split, elapsed_time, total_file_size):
         self.is_processing = False
         self.run_btn.config(state="normal", text="▶  Start Filtering")
+        self.progress_bar["value"] = 100.0 if not err else 0.0
+        self.progress_pct_label.config(text="100%" if not err else "0%")
 
         if err:
             self.status_label.config(text=f"Error: {err}", foreground="#cc0000")
+            self._log(f"Processing error: {err}", tag="error")
             messagebox.showerror("Processing Error", f"An error occurred while processing:\n{err}")
         else:
+            removed = max(0, total_scanned - total_kept)
+            pct_kept = (total_kept / total_scanned * 100.0) if total_scanned > 0 else 0.0
+            pct_removed = (removed / total_scanned * 100.0) if total_scanned > 0 else 0.0
+            mb_tot = total_file_size / (1024 * 1024)
+            speed_mb = mb_tot / elapsed_time if elapsed_time > 0 else 0.0
+
             if was_split:
-                status_txt = f"Done! {total_kept:,} words saved across split parts (_part1, _part2...)"
+                status_txt = f"Done in {elapsed_time:.2f}s! Kept: {total_kept:,} ({pct_kept:.1f}%) | Removed: {removed:,} ({pct_removed:.1f}%) across parts"
                 msg_body = (
-                    f"Filtered list saved successfully across multiple parts!\n\n"
-                    f"Total retained words: {total_kept:,}\n"
-                    f"Output parts pattern: {output_filename.replace('.', '_partN.')}\n"
-                    f"Destination folder: {directory}"
+                    f"Wordlist filtering completed successfully across split parts!\n\n"
+                    f"Processing Time: {elapsed_time:.2f} seconds ({speed_mb:.1f} MB/s)\n\n"
+                    f"Word Count Statistics:\n"
+                    f"  • Original Words:  {total_scanned:,} (100.0%)\n"
+                    f"  • Retained Words:  {total_kept:,} ({pct_kept:.1f}%)\n"
+                    f"  • Removed Words:   {removed:,} ({pct_removed:.1f}%)\n\n"
+                    f"Destination:\n"
+                    f"  • Output Parts: {output_filename.replace('.', '_partN.')}\n"
+                    f"  • Folder: {directory}"
                 )
             else:
-                status_txt = f"Done! {total_kept:,} words saved to {output_filename}"
+                status_txt = f"Done in {elapsed_time:.2f}s! Kept: {total_kept:,} ({pct_kept:.1f}%) | Removed: {removed:,} ({pct_removed:.1f}%)"
                 msg_body = (
-                    f"Filtered list saved successfully!\n\n"
-                    f"Retained words: {total_kept:,}\n"
-                    f"Output file: {output_filename}\n"
-                    f"Destination folder: {directory}"
+                    f"Wordlist filtering completed successfully!\n\n"
+                    f"Processing Time: {elapsed_time:.2f} seconds ({speed_mb:.1f} MB/s)\n\n"
+                    f"Word Count Statistics:\n"
+                    f"  • Original Words:  {total_scanned:,} (100.0%)\n"
+                    f"  • Retained Words:  {total_kept:,} ({pct_kept:.1f}%)\n"
+                    f"  • Removed Words:   {removed:,} ({pct_removed:.1f}%)\n\n"
+                    f"Destination:\n"
+                    f"  • Output File: {output_filename}\n"
+                    f"  • Folder: {directory}"
                 )
 
             self.status_label.config(text=status_txt, foreground="#008000")
-            messagebox.showinfo("Success", msg_body)
+            self._log(f"======================================================", tag="success")
+            self._log(f"PROCESSING COMPLETED in {elapsed_time:.2f}s ({speed_mb:.1f} MB/s)", tag="success")
+            self._log(f"  • Original words:  {total_scanned:,} (100.0%)", tag="stat")
+            self._log(f"  • Retained words:  {total_kept:,} ({pct_kept:.1f}%)", tag="stat")
+            self._log(f"  • Removed words:   {removed:,} ({pct_removed:.1f}%)", tag="stat")
+            self._log(f"  • Destination:     {os.path.join(directory, output_filename)}", tag="info")
+            self._log(f"======================================================", tag="success")
+            messagebox.showinfo("Processing Complete", msg_body)
 
 
 if __name__ == "__main__":

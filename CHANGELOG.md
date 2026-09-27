@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-09-27
+
+### Added / Changed
+- Add real-time progress bar, collapsible status log console, and detailed post-processing summary (original, retained, and removed word counts)
+
+
 ## [1.2.1] - 2026-09-27
 
 ### Added / Changed

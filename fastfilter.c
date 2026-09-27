@@ -7,7 +7,7 @@
 #include <wchar.h>
 #endif
 
-#define FASTFILTER_VERSION "1.2.1"
+#define FASTFILTER_VERSION "1.3.0"
 #define BUF_SIZE (1024 * 1024 * 4) // 4 MB I/O streaming buffer
 
 // 64-bit FNV-1a Hash (Case-insensitive for standard words)
@@ -173,6 +173,8 @@ typedef struct {
     char *out_buf;
 } OutputWriter;
 
+typedef void (*ProgressCallback)(long long scanned, long long kept, long long bytes_read);
+
 static int writer_open_next_part(OutputWriter *w) {
     if (w->dst) {
         fflush(w->dst);
@@ -228,7 +230,9 @@ static long long process_file_internal(
     int max_len,
     int charset_mode, // 0 = all, 1 = letters only, 2 = alphanumeric only, 3 = ASCII printable (32-126)
     int output_mode,  // 0 = list, 1 = preserve lines
-    int dedup
+    int dedup,
+    ProgressCallback progress_cb,
+    long long *out_scanned
 ) {
     char *in_buf = (char*)malloc(BUF_SIZE);
     if (in_buf) setvbuf(src, in_buf, _IOFBF, BUF_SIZE);
@@ -241,12 +245,16 @@ static long long process_file_internal(
     }
 
     HashSet *set = dedup ? hashset_create(1048576) : NULL; // 1M slots initial (~8MB RAM)
+    long long total_scanned = 0;
     long long total_kept = 0;
+    long long bytes_read = 0;
 
     char line[65536];
     char word[4096];
 
     while (fgets(line, sizeof(line), src)) {
+        size_t line_len = strlen(line);
+        bytes_read += (long long)line_len;
         char *ptr = line;
         int first_in_line = 1;
 
@@ -273,6 +281,11 @@ static long long process_file_internal(
                     word[w_len++] = c;
                 }
                 word[w_len] = '\0';
+                total_scanned++;
+
+                if (progress_cb && (total_scanned & 0x3FFFF) == 0) {
+                    progress_cb(total_scanned, total_kept, bytes_read);
+                }
 
                 if (!is_ascii) continue; // Must be strictly ASCII printable
                 if (w_len < min_len || w_len > max_len) continue;
@@ -317,6 +330,11 @@ static long long process_file_internal(
                     word[w_len++] = *ptr++;
                 }
                 word[w_len] = '\0';
+                total_scanned++;
+
+                if (progress_cb && (total_scanned & 0x3FFFF) == 0) {
+                    progress_cb(total_scanned, total_kept, bytes_read);
+                }
 
                 // Trim leading/trailing hyphens, quotes, underscores
                 int start = 0;
@@ -392,6 +410,13 @@ static long long process_file_internal(
         }
     }
 
+    if (progress_cb) {
+        progress_cb(total_scanned, total_kept, bytes_read);
+    }
+    if (out_scanned) {
+        *out_scanned = total_scanned;
+    }
+
     if (writer->dst) {
         fflush(writer->dst);
         fclose(writer->dst);
@@ -420,7 +445,9 @@ long long process_file_fast(
     int output_mode,
     int dedup,
     long long split_lines,
-    long long split_bytes
+    long long split_bytes,
+    ProgressCallback progress_cb,
+    long long *out_scanned
 ) {
     FILE *src = fopen(src_path, "rb");
     if (!src) return -1;
@@ -432,7 +459,7 @@ long long process_file_fast(
     writer.split_lines = split_lines;
     writer.split_bytes = split_bytes;
 
-    long long result = process_file_internal(src, &writer, min_len, max_len, charset_mode, output_mode, dedup);
+    long long result = process_file_internal(src, &writer, min_len, max_len, charset_mode, output_mode, dedup, progress_cb, out_scanned);
     fclose(src);
     return result;
 }
@@ -449,7 +476,9 @@ long long process_file_fast_w(
     int output_mode,
     int dedup,
     long long split_lines,
-    long long split_bytes
+    long long split_bytes,
+    ProgressCallback progress_cb,
+    long long *out_scanned
 ) {
     FILE *src = _wfopen(src_path, L"rb");
     if (!src) return -1;
@@ -461,7 +490,7 @@ long long process_file_fast_w(
     writer.split_lines = split_lines;
     writer.split_bytes = split_bytes;
 
-    long long result = process_file_internal(src, &writer, min_len, max_len, charset_mode, output_mode, dedup);
+    long long result = process_file_internal(src, &writer, min_len, max_len, charset_mode, output_mode, dedup, progress_cb, out_scanned);
     fclose(src);
     return result;
 }
@@ -508,7 +537,8 @@ int main(int argc, char **argv) {
     printf("Settings: min=%d, max=%d, charset=%d, mode=%d, dedup=%d, split_lines=%lld, split_bytes=%lld\n",
            min_len, max_len, charset_mode, output_mode, dedup, split_lines, split_bytes);
 
-    long long kept = process_file_fast(src, dst, min_len, max_len, charset_mode, output_mode, dedup, split_lines, split_bytes);
+    long long total_scanned = 0;
+    long long kept = process_file_fast(src, dst, min_len, max_len, charset_mode, output_mode, dedup, split_lines, split_bytes, NULL, &total_scanned);
     if (kept == -1) {
         fprintf(stderr, "[ERROR] Could not open source file: %s\n", src);
         return 2;
@@ -517,7 +547,16 @@ int main(int argc, char **argv) {
         return 3;
     }
 
-    printf("[SUCCESS] Completed! Retained %lld words.\n", kept);
+    long long removed = total_scanned - kept;
+    double pct_kept = total_scanned > 0 ? ((double)kept / total_scanned) * 100.0 : 0.0;
+    double pct_removed = total_scanned > 0 ? ((double)removed / total_scanned) * 100.0 : 0.0;
+
+    printf("\n======================================================\n");
+    printf("[SUCCESS] Completed successfully!\n");
+    printf("  Original words: %lld (100.0%%)\n", total_scanned);
+    printf("  Retained words: %lld (%.1f%%)\n", kept, pct_kept);
+    printf("  Removed words:  %lld (%.1f%%)\n", removed, pct_removed);
+    printf("======================================================\n");
     return 0;
 }
 #endif
