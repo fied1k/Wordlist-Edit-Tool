@@ -1,0 +1,35 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+
+# C build artifacts and toolchains
+*.o
+*.obj
+w64devkit/
+w64devkit*.*
+*.7z
+*.exe.7z
+
+# PyInstaller / Build output directories
+build/
+dist/
+*.spec.bak
+
+# Logs and temporary files
+*.log
+*.tmp
+temp/
+test_*.txt
+
+# IDE / Editor folders
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS artifacts
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/

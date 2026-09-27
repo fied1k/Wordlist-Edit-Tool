@@ -1,0 +1,67 @@
+name: Build & Release Standalone Binaries
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows Standalone Executables
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller
+
+      - name: Compile Native C Acceleration Engine (DLL & CLI)
+        run: |
+          gcc -O3 -shared -o fastfilter.dll fastfilter.c
+          mkdir -Force dist
+          gcc -O3 -DBUILD_CLI -o dist\fastfilter.exe fastfilter.c
+
+      - name: Build Standalone GUI Executable (PyInstaller)
+        run: |
+          python -m PyInstaller --clean -y WordLengthFilter.spec
+
+      - name: Verify Compiled Binaries
+        run: |
+          .\dist\fastfilter.exe --version
+          Get-ChildItem -Path .\dist
+
+      - name: Upload Build Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: wordlengthfilter-windows-binaries
+          path: |
+            dist/WordLengthFilter.exe
+            dist/fastfilter.exe
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/WordLengthFilter.exe
+            dist/fastfilter.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
