@@ -7,7 +7,7 @@
 #include <wchar.h>
 #endif
 
-#define FASTFILTER_VERSION "1.2.0"
+#define FASTFILTER_VERSION "1.2.1"
 #define BUF_SIZE (1024 * 1024 * 4) // 4 MB I/O streaming buffer
 
 // 64-bit FNV-1a Hash (Case-insensitive for standard words)

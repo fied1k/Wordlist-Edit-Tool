@@ -6,7 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -57,8 +57,8 @@ class LengthFilterApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Word Length & Character Filter v{__version__}")
-        self.root.geometry("600x720")
-        self.root.minsize(560, 680)
+        self.root.geometry("690x560")
+        self.root.minsize(620, 500)
         self.root.resizable(True, True)
 
         # Style configuration
@@ -86,37 +86,70 @@ class LengthFilterApp:
 
         self._build_ui()
 
-    def _build_ui(self):
-        container = ttk.Frame(self.root, padding="14")
-        container.pack(fill=tk.BOTH, expand=True)
+        # Keyboard shortcut: Enter key triggers filtering
+        self.root.bind("<Return>", lambda event: self._process_file())
 
-        # 1. Source File Selection
-        src_frame = ttk.LabelFrame(container, text="1. Source Wordlist File", padding="8")
-        src_frame.pack(fill=tk.X, pady=(0, 6))
+    def _build_ui(self):
+        # 1. PERMANENT STICKY BOTTOM ACTION BAR (Packed first with side=BOTTOM so it's NEVER hidden)
+        bottom_bar = ttk.Frame(self.root, padding="10 8 10 10", relief="groove")
+        bottom_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.run_btn = ttk.Button(
+            bottom_bar,
+            text="▶  Start Filtering",
+            command=self._process_file,
+            width=22,
+        )
+        self.run_btn.pack(side=tk.LEFT, padx=(4, 12), ipady=5)
+
+        engine_info = "Native C Engine (Ultra-Fast)" if C_FILTER_FUNC else "Standard Engine"
+        self.status_label = ttk.Label(
+            bottom_bar,
+            text=f"Ready ({engine_info}). Select a source file and click Start Filtering.",
+            foreground="#333333",
+        )
+        self.status_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+
+        # 2. MAIN CONFIGURATION CONTAINER
+        main_container = ttk.Frame(self.root, padding="12 10 12 4")
+        main_container.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
+
+        # Section 1: Source File Selection
+        src_frame = ttk.LabelFrame(main_container, text="1. Source Wordlist File", padding="6")
+        src_frame.pack(fill=tk.X, pady=(0, 5))
 
         ttk.Entry(src_frame, textvariable=self.file_path_var).pack(
-            side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True
+            side=tk.LEFT, padx=(0, 6), fill=tk.X, expand=True
         )
         ttk.Button(src_frame, text="Browse...", command=self._browse_source_file).pack(
             side=tk.RIGHT
         )
 
-        # 2. Destination Folder Selection
-        dest_frame = ttk.LabelFrame(container, text="2. Destination Folder (Optional)", padding="8")
+        # Section 2: Destination Folder Selection
+        dest_frame = ttk.LabelFrame(main_container, text="2. Destination Folder (Optional - defaults to source dir)", padding="6")
         dest_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Entry(dest_frame, textvariable=self.dest_folder_var).pack(
-            side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True
+            side=tk.LEFT, padx=(0, 6), fill=tk.X, expand=True
         )
         ttk.Button(dest_frame, text="Browse...", command=self._browse_dest_folder).pack(
             side=tk.RIGHT
         )
 
-        # 3. Rule Presets
-        preset_frame = ttk.LabelFrame(container, text="3. Quick Presets", padding="8")
+        # Responsive 2-Column Grid Layout for Settings
+        cols_frame = ttk.Frame(main_container)
+        cols_frame.pack(fill=tk.BOTH, expand=True)
+        cols_frame.columnconfigure(0, weight=1)
+        cols_frame.columnconfigure(1, weight=1)
+
+        # ================= LEFT COLUMN =================
+        left_col = ttk.Frame(cols_frame)
+        left_col.grid(row=0, column=0, sticky="nsew", padx=(0, 5))
+
+        # Section 3: Presets
+        preset_frame = ttk.LabelFrame(left_col, text="3. Quick Presets", padding="6")
         preset_frame.pack(fill=tk.X, pady=(0, 6))
 
-        ttk.Label(preset_frame, text="Select Preset:").pack(side=tk.LEFT, padx=(4, 8))
         self.preset_combo = ttk.Combobox(
             preset_frame,
             textvariable=self.preset_var,
@@ -128,91 +161,98 @@ class LengthFilterApp:
                 "Alphanumeric (8-16 chars)",
                 "Letters Only (4-12 chars)",
             ],
-            width=45,
         )
-        self.preset_combo.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(0, 4))
+        self.preset_combo.pack(fill=tk.X, padx=2, pady=1)
         self.preset_combo.bind("<<ComboboxSelected>>", self._on_preset_change)
 
-        # 4. Length Range Controls
-        len_frame = ttk.LabelFrame(container, text="4. Character Length Range", padding="8")
-        len_frame.pack(fill=tk.X, pady=(0, 6))
-
-        ttk.Label(len_frame, text="Minimum:").grid(row=0, column=0, sticky=tk.W, padx=4)
-        ttk.Spinbox(
-            len_frame, from_=1, to=999, textvariable=self.min_len_var, width=6
-        ).grid(row=0, column=1, sticky=tk.W, padx=(0, 24))
-
-        ttk.Label(len_frame, text="Maximum:").grid(row=0, column=2, sticky=tk.W, padx=4)
-        ttk.Spinbox(
-            len_frame, from_=1, to=999, textvariable=self.max_len_var, width=6
-        ).grid(row=0, column=3, sticky=tk.W, padx=4)
-
-        # 5. Character Filter Rules
-        char_frame = ttk.LabelFrame(container, text="5. Character Rules", padding="8")
-        char_frame.pack(fill=tk.X, pady=(0, 6))
+        # Section 4: Character Filter Rules
+        char_frame = ttk.LabelFrame(left_col, text="4. Character Rules", padding="6")
+        char_frame.pack(fill=tk.BOTH, expand=True)
 
         ttk.Radiobutton(
             char_frame,
-            text="Any characters (Standard words with hyphens/apostrophes)",
+            text="Any characters (Standard words)",
             variable=self.charset_var,
             value="all",
             command=self._on_rule_manual_change,
-        ).grid(row=0, column=0, columnspan=2, sticky=tk.W, pady=1)
+        ).pack(anchor=tk.W, pady=1)
 
         ttk.Radiobutton(
             char_frame,
-            text="Letters only (Exclude numbers, punctuation, and symbols)",
+            text="Letters only (Exclude numbers/symbols)",
             variable=self.charset_var,
             value="letters",
             command=self._on_rule_manual_change,
-        ).grid(row=1, column=0, columnspan=2, sticky=tk.W, pady=1)
+        ).pack(anchor=tk.W, pady=1)
 
         ttk.Radiobutton(
             char_frame,
-            text="Alphanumeric only (Letters and digits, no punctuation)",
+            text="Alphanumeric only (Letters and digits)",
             variable=self.charset_var,
             value="alnum",
             command=self._on_rule_manual_change,
-        ).grid(row=2, column=0, columnspan=2, sticky=tk.W, pady=1)
+        ).pack(anchor=tk.W, pady=1)
 
         ttk.Radiobutton(
             char_frame,
-            text="ASCII printable only (32-126, WPA2 / Wi-Fi keys, preserved symbols)",
+            text="ASCII printable only (32-126, WPA2/Wi-Fi)",
             variable=self.charset_var,
             value="ascii_printable",
             command=self._on_rule_manual_change,
-        ).grid(row=3, column=0, columnspan=2, sticky=tk.W, pady=1)
+        ).pack(anchor=tk.W, pady=1)
 
+        custom_row = ttk.Frame(char_frame)
+        custom_row.pack(fill=tk.X, pady=(2, 0))
         ttk.Radiobutton(
-            char_frame,
-            text="Custom Regex match:",
+            custom_row,
+            text="Custom Regex:",
             variable=self.charset_var,
             value="custom",
             command=self._on_rule_manual_change,
-        ).grid(row=4, column=0, sticky=tk.W, pady=1)
+        ).pack(side=tk.LEFT)
 
         self.regex_entry = ttk.Entry(
-            char_frame, textvariable=self.custom_regex_var, width=28, state="disabled"
+            custom_row, textvariable=self.custom_regex_var, width=20, state="disabled"
         )
-        self.regex_entry.grid(row=4, column=1, sticky=tk.W, padx=(8, 0), pady=1)
+        self.regex_entry.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=(4, 0))
 
-        # 6. Output Options & Deduplication
-        opts_frame = ttk.LabelFrame(container, text="6. Output Formatting & Deduplication", padding="8")
+        # ================= RIGHT COLUMN =================
+        right_col = ttk.Frame(cols_frame)
+        right_col.grid(row=0, column=1, sticky="nsew", padx=(5, 0))
+
+        # Section 5: Length Controls
+        len_frame = ttk.LabelFrame(right_col, text="5. Character Length Range", padding="6")
+        len_frame.pack(fill=tk.X, pady=(0, 6))
+
+        len_sub = ttk.Frame(len_frame)
+        len_sub.pack(fill=tk.X)
+        ttk.Label(len_sub, text="Minimum:").pack(side=tk.LEFT, padx=(2, 4))
+        ttk.Spinbox(
+            len_sub, from_=1, to=999, textvariable=self.min_len_var, width=6
+        ).pack(side=tk.LEFT, padx=(0, 16))
+
+        ttk.Label(len_sub, text="Maximum:").pack(side=tk.LEFT, padx=(2, 4))
+        ttk.Spinbox(
+            len_sub, from_=1, to=999, textvariable=self.max_len_var, width=6
+        ).pack(side=tk.LEFT)
+
+        # Section 6: Output & Deduplication
+        opts_frame = ttk.LabelFrame(right_col, text="6. Output & Deduplication", padding="6")
         opts_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Radiobutton(
             opts_frame,
-            text="One word per line (wordlist format)",
+            text="One word per line (standard wordlist)",
             variable=self.mode_var,
             value="list",
-        ).pack(anchor=tk.W)
+        ).pack(anchor=tk.W, pady=1)
 
         ttk.Radiobutton(
             opts_frame,
-            text="Preserve line structure (filter words within each line)",
+            text="Preserve line structure",
             variable=self.mode_var,
             value="preserve",
-        ).pack(anchor=tk.W)
+        ).pack(anchor=tk.W, pady=1)
 
         ttk.Checkbutton(
             opts_frame,
@@ -220,69 +260,59 @@ class LengthFilterApp:
             variable=self.unique_var,
         ).pack(anchor=tk.W, pady=(2, 0))
 
-        # 7. Output Splitting / Rollover Frame (For Very Large Files)
-        split_frame = ttk.LabelFrame(container, text="7. Output Splitting (For Multi-Gigabyte Wordlists)", padding="8")
-        split_frame.pack(fill=tk.X, pady=(0, 8))
+        # Section 7: Output Splitting
+        split_frame = ttk.LabelFrame(right_col, text="7. Output Splitting (Large Files)", padding="6")
+        split_frame.pack(fill=tk.X)
 
         ttk.Checkbutton(
             split_frame,
-            text="Split output into parts (_part1, _part2... with global deduplication)",
+            text="Split output into parts (_part1, _part2...)",
             variable=self.split_enabled_var,
             command=self._toggle_split_controls,
-        ).pack(anchor=tk.W, pady=(0, 4))
+        ).pack(anchor=tk.W, pady=(0, 2))
 
         split_opts_frame = ttk.Frame(split_frame)
-        split_opts_frame.pack(fill=tk.X, padx=16)
+        split_opts_frame.pack(fill=tk.X, padx=4)
 
+        split_line_row = ttk.Frame(split_opts_frame)
+        split_line_row.pack(fill=tk.X, pady=1)
         ttk.Radiobutton(
-            split_opts_frame,
-            text="By word count:",
+            split_line_row,
+            text="By count:",
             variable=self.split_mode_var,
             value="lines",
             command=self._toggle_split_controls,
-        ).grid(row=0, column=0, sticky=tk.W, pady=1)
-
+        ).pack(side=tk.LEFT)
         self.split_lines_entry = ttk.Spinbox(
-            split_opts_frame,
+            split_line_row,
             from_=1000,
             to=1000000000,
             textvariable=self.split_lines_var,
-            width=12,
+            width=10,
             state="disabled",
         )
-        self.split_lines_entry.grid(row=0, column=1, sticky=tk.W, padx=(8, 8), pady=1)
-        ttk.Label(split_opts_frame, text="words / lines per part").grid(row=0, column=2, sticky=tk.W, pady=1)
+        self.split_lines_entry.pack(side=tk.LEFT, padx=(4, 4))
+        ttk.Label(split_line_row, text="words/part").pack(side=tk.LEFT)
 
+        split_mb_row = ttk.Frame(split_opts_frame)
+        split_mb_row.pack(fill=tk.X, pady=1)
         ttk.Radiobutton(
-            split_opts_frame,
-            text="By file size:",
+            split_mb_row,
+            text="By size:",
             variable=self.split_mode_var,
             value="mb",
             command=self._toggle_split_controls,
-        ).grid(row=1, column=0, sticky=tk.W, pady=1)
-
+        ).pack(side=tk.LEFT)
         self.split_mb_entry = ttk.Spinbox(
-            split_opts_frame,
+            split_mb_row,
             from_=10,
             to=1000000,
             textvariable=self.split_mb_var,
-            width=12,
+            width=10,
             state="disabled",
         )
-        self.split_mb_entry.grid(row=1, column=1, sticky=tk.W, padx=(8, 8), pady=1)
-        ttk.Label(split_opts_frame, text="MB per part").grid(row=1, column=2, sticky=tk.W, pady=1)
-
-        # 8. Action Button & Status
-        self.run_btn = ttk.Button(
-            container, text="Filter and Save", command=self._process_file
-        )
-        self.run_btn.pack(fill=tk.X, pady=(2, 4))
-
-        engine_info = "Native C Acceleration" if C_FILTER_FUNC else "Standard Engine"
-        self.status_label = ttk.Label(
-            container, text=f"Ready ({engine_info}). Select a source file to begin.", foreground="#555555"
-        )
-        self.status_label.pack(anchor=tk.W)
+        self.split_mb_entry.pack(side=tk.LEFT, padx=(13, 4))
+        ttk.Label(split_mb_row, text="MB/part").pack(side=tk.LEFT)
 
     def _toggle_split_controls(self):
         if self.split_enabled_var.get():
@@ -304,7 +334,7 @@ class LengthFilterApp:
             self.charset_var.set("ascii_printable")
             self._toggle_custom_regex()
             self.status_label.config(
-                text="Preset: WPA2 Length (8-63 chars, ASCII printable)",
+                text="Preset applied: WPA2 Length (8-63 chars, ASCII printable). Press Enter to Start.",
                 foreground="#0055d4",
             )
         elif choice.startswith("WPA2 Typical (8-16"):
@@ -313,7 +343,7 @@ class LengthFilterApp:
             self.charset_var.set("ascii_printable")
             self._toggle_custom_regex()
             self.status_label.config(
-                text="Preset: WPA2 Typical (8-16 chars, ASCII printable)",
+                text="Preset applied: WPA2 Typical (8-16 chars, ASCII printable). Press Enter to Start.",
                 foreground="#0055d4",
             )
         elif choice.startswith("Alphanumeric (8-16"):
@@ -322,7 +352,7 @@ class LengthFilterApp:
             self.charset_var.set("alnum")
             self._toggle_custom_regex()
             self.status_label.config(
-                text="Preset: Alphanumeric (8-16 chars)",
+                text="Preset applied: Alphanumeric (8-16 chars). Press Enter to Start.",
                 foreground="#0055d4",
             )
         elif choice.startswith("Letters Only (4-12"):
@@ -331,7 +361,7 @@ class LengthFilterApp:
             self.charset_var.set("letters")
             self._toggle_custom_regex()
             self.status_label.config(
-                text="Preset: Letters Only (4-12 chars)",
+                text="Preset applied: Letters Only (4-12 chars). Press Enter to Start.",
                 foreground="#0055d4",
             )
 
@@ -368,7 +398,7 @@ class LengthFilterApp:
             if not self.dest_folder_var.get().strip():
                 self.dest_folder_var.set(os.path.dirname(chosen_path))
             self.status_label.config(
-                text=f"Selected: {os.path.basename(chosen_path)}",
+                text=f"Selected: {os.path.basename(chosen_path)} — Click 'Start Filtering' to run.",
                 foreground="#000000",
             )
 
@@ -553,7 +583,7 @@ class LengthFilterApp:
 
         # Set UI to busy state
         self.is_processing = True
-        self.run_btn.config(state="disabled", text="Filtering... Please wait")
+        self.run_btn.config(state="disabled", text="⏳  Filtering... Please wait")
         self.status_label.config(text="Processing file in background...", foreground="#0055d4")
 
         # Worker thread for smooth non-blocking UI
@@ -604,7 +634,7 @@ class LengthFilterApp:
 
     def _on_complete(self, err, total_kept, output_filename, directory, was_split):
         self.is_processing = False
-        self.run_btn.config(state="normal", text="Filter and Save")
+        self.run_btn.config(state="normal", text="▶  Start Filtering")
 
         if err:
             self.status_label.config(text=f"Error: {err}", foreground="#cc0000")
