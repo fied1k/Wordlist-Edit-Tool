@@ -1,6 +1,6 @@
 # WordLengthFilter ⚡
 
-[![Release](https://img.shields.io/badge/version-v1.3.0-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/version-v1.4.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010%20(x64)-0078D6.svg?logo=windows)](#)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](#)
 [![C Engine](https://img.shields.io/badge/Engine-Native%20C%20(GCC%2016)-00599C.svg?logo=c)](#)
@@ -57,7 +57,8 @@ flowchart TD
 - **📋 Collapsible Real-Time Status Log**: One-click toggleable log console streaming live timestamped progress, file specs, chunk rollover alerts, and engine telemetry.
 - **📈 Comprehensive Processing Summary**: Detailed post-processing breakdown showing original words, retained words (and percentage), and removed words (and percentage) in both GUI and CLI.
 - **🖥️ Non-Blocking Windows GUI**: Operations run on background worker threads—the UI remains smooth and responsive without freezing.
-- **📁 Destination Folder Selector**: Custom destination directory chooser with automatic fallback to the source file directory.
+- **📁 Destination Folder & Custom Filename Naming**: Custom destination directory chooser and fully editable output filename field.
+- **🏷️ Smart Rule-Based Naming & Live Preview**: Real-time destination preview banner with dynamic rule-based naming presets (`ASCII8to16char_filename.txt`, `8to64_anychar_filename.txt`, `Filtered_filename.txt`), split rollover preview, and one-click auto-reset.
 - **✂️ Output Splitting & Chunk Rollover**: Divide massive dictionaries into manageable parts (e.g. 5,000,000 words or 1,024 MB per part) on-the-fly **without breaking global deduplication** or doubling disk I/O.
 - **⚡ Built-in Wi-Fi / Security Presets**:
   - **WPA2 Standard (8-63 chars, ASCII Printable)**: Filters strictly to valid IEEE 802.11i Wi-Fi passphrases.

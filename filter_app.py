@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.3.0"
+__version__ = "1.4.0"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -66,8 +66,8 @@ class LengthFilterApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Word Length & Character Filter v{__version__}")
-        self.root.geometry("690x560")
-        self.root.minsize(620, 500)
+        self.root.geometry("700x620")
+        self.root.minsize(640, 560)
         self.root.resizable(True, True)
 
         # Style configuration
@@ -77,6 +77,11 @@ class LengthFilterApp:
         # State variables
         self.file_path_var = tk.StringVar()
         self.dest_folder_var = tk.StringVar()
+        self.dest_filename_var = tk.StringVar()
+        self.naming_style_var = tk.StringVar(value="Rule Prefix (Recommended)")
+        self.user_custom_filename = False
+        self._updating_naming = False
+
         self.preset_var = tk.StringVar(value="Custom / Manual")
         self.min_len_var = tk.StringVar(value="3")
         self.max_len_var = tk.StringVar(value="12")
@@ -95,6 +100,15 @@ class LengthFilterApp:
         self.log_visible = False
 
         self._build_ui()
+
+        # Variable traces for live dynamic preview updates
+        self.dest_folder_var.trace_add("write", lambda *args: self._update_destination_preview())
+        self.min_len_var.trace_add("write", lambda *args: self._on_rule_change_event())
+        self.max_len_var.trace_add("write", lambda *args: self._on_rule_change_event())
+        self.charset_var.trace_add("write", lambda *args: self._on_rule_change_event())
+
+        # Initialize naming preview
+        self._update_destination_preview()
 
         # Keyboard shortcut: Enter key triggers filtering
         self.root.bind("<Return>", lambda event: self._process_file())
@@ -197,16 +211,53 @@ class LengthFilterApp:
             side=tk.RIGHT
         )
 
-        # Section 2: Destination Folder Selection
-        dest_frame = ttk.LabelFrame(main_container, text="2. Destination Folder (Optional - defaults to source dir)", padding="6")
+        # Section 2: Destination Folder & Custom Output Filename
+        dest_frame = ttk.LabelFrame(main_container, text="2. Destination Folder & Output Filename", padding="6")
         dest_frame.pack(fill=tk.X, pady=(0, 6))
 
-        ttk.Entry(dest_frame, textvariable=self.dest_folder_var).pack(
-            side=tk.LEFT, padx=(0, 6), fill=tk.X, expand=True
+        # Row 1: Destination folder
+        folder_row = ttk.Frame(dest_frame)
+        folder_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(folder_row, text="Folder:", width=10).pack(side=tk.LEFT)
+        self.dest_folder_entry = ttk.Entry(folder_row, textvariable=self.dest_folder_var)
+        self.dest_folder_entry.pack(side=tk.LEFT, padx=(0, 6), fill=tk.X, expand=True)
+        ttk.Button(folder_row, text="Browse...", command=self._browse_dest_folder).pack(side=tk.RIGHT)
+
+        # Row 2: Custom filename & Rule-based options
+        fname_row = ttk.Frame(dest_frame)
+        fname_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(fname_row, text="Filename:", width=10).pack(side=tk.LEFT)
+        self.dest_fname_entry = ttk.Entry(fname_row, textvariable=self.dest_filename_var)
+        self.dest_fname_entry.pack(side=tk.LEFT, padx=(0, 6), fill=tk.X, expand=True)
+        self.dest_fname_entry.bind("<KeyRelease>", self._on_manual_filename_edit)
+
+        # Naming style / options combobox
+        self.naming_combo = ttk.Combobox(
+            fname_row,
+            textvariable=self.naming_style_var,
+            state="readonly",
+            width=30,
         )
-        ttk.Button(dest_frame, text="Browse...", command=self._browse_dest_folder).pack(
-            side=tk.RIGHT
+        self.naming_combo.pack(side=tk.LEFT, padx=(0, 4))
+        self.naming_combo.bind("<<ComboboxSelected>>", self._on_naming_style_selected)
+
+        self.reset_name_btn = ttk.Button(
+            fname_row, text="↺ Auto", width=7, command=self._reset_filename_to_auto
         )
+        self.reset_name_btn.pack(side=tk.RIGHT)
+
+        # Row 3: Live Output Path Preview
+        preview_row = ttk.Frame(dest_frame)
+        preview_row.pack(fill=tk.X, pady=(2, 0))
+        ttk.Label(preview_row, text="Preview:", width=10, font=("Segoe UI", 8, "bold")).pack(side=tk.LEFT)
+        self.preview_label = ttk.Label(
+            preview_row,
+            text="Select a source file to preview destination path",
+            font=("Consolas", 8),
+            foreground="#0055d4",
+            anchor="w",
+        )
+        self.preview_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
 
         # Responsive 2-Column Grid Layout for Settings
         cols_frame = ttk.Frame(main_container)
@@ -397,6 +448,7 @@ class LengthFilterApp:
         else:
             self.split_lines_entry.config(state="disabled")
             self.split_mb_entry.config(state="disabled")
+        self._update_destination_preview()
 
     def _on_preset_change(self, event=None):
         choice = self.preset_var.get()
@@ -436,6 +488,7 @@ class LengthFilterApp:
                 text="Preset applied: Letters Only (4-12 chars). Press Enter to Start.",
                 foreground="#0055d4",
             )
+        self._update_destination_preview()
 
     def _on_rule_manual_change(self):
         self._toggle_custom_regex()
@@ -453,6 +506,7 @@ class LengthFilterApp:
             self.preset_var.set("Letters Only (4-12 chars)")
         else:
             self.preset_var.set("Custom / Manual")
+        self._update_destination_preview()
 
     def _toggle_custom_regex(self):
         if self.charset_var.get() == "custom":
@@ -469,16 +523,16 @@ class LengthFilterApp:
             self.log_visible = True
             cur_w = self.root.winfo_width()
             cur_h = self.root.winfo_height()
-            if cur_h < 700:
-                self.root.geometry(f"{max(cur_w, 690)}x740")
+            if cur_h < 740:
+                self.root.geometry(f"{max(cur_w, 700)}x780")
         else:
             self.log_container.pack_forget()
             self.toggle_log_btn.config(text="📋  Show Log")
             self.log_visible = False
             cur_w = self.root.winfo_width()
             cur_h = self.root.winfo_height()
-            if cur_h > 600:
-                self.root.geometry(f"{max(cur_w, 690)}x560")
+            if cur_h > 640:
+                self.root.geometry(f"{max(cur_w, 700)}x620")
 
     def _log(self, message, tag="info"):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
@@ -506,6 +560,161 @@ class LengthFilterApp:
             foreground="#0055d4",
         )
 
+    def _compute_rule_tag(self):
+        min_v = self.min_len_var.get().strip()
+        max_v = self.max_len_var.get().strip()
+        if not min_v.isdigit():
+            min_v = "3"
+        if not max_v.isdigit():
+            max_v = "12"
+
+        charset = self.charset_var.get()
+        preset = self.preset_var.get()
+
+        if preset.startswith("WPA2 Length"):
+            return f"ASCII{min_v}to{max_v}char"
+        elif preset.startswith("WPA2 Typical"):
+            return f"ASCII{min_v}to{max_v}char"
+        elif charset == "ascii_printable":
+            return f"ASCII{min_v}to{max_v}char"
+        elif charset == "letters":
+            return f"Letters{min_v}to{max_v}char"
+        elif charset == "alnum":
+            return f"Alnum{min_v}to{max_v}char"
+        elif charset == "custom":
+            return f"Regex{min_v}to{max_v}char"
+        else:
+            return f"{min_v}to{max_v}_anychar"
+
+    def _compute_naming_options(self, orig_name):
+        if not orig_name:
+            orig_name = "filename.txt"
+        base, ext = os.path.splitext(orig_name)
+        if not ext:
+            ext = ".txt"
+
+        rule_tag = self._compute_rule_tag()
+
+        rule_prefix = f"{rule_tag}_{base}{ext}"
+        rule_suffix = f"{base}_{rule_tag}{ext}"
+        filtered_prefix = f"Filtered_{base}{ext}"
+        classic_prefix = f"lengthfilter_{base}{ext}"
+
+        return {
+            "rule_prefix": rule_prefix,
+            "rule_suffix": rule_suffix,
+            "filtered": filtered_prefix,
+            "classic": classic_prefix,
+        }
+
+    def _refresh_naming_combo_values(self):
+        source_path = self.file_path_var.get().strip()
+        orig_name = os.path.basename(source_path) if source_path else "filename.txt"
+        opts = self._compute_naming_options(orig_name)
+
+        combo_values = [
+            f"Rule Prefix: {opts['rule_prefix']}",
+            f"Rule Suffix: {opts['rule_suffix']}",
+            f"Filtered: {opts['filtered']}",
+            f"Classic: {opts['classic']}",
+            "Custom / Manual",
+        ]
+        self.naming_combo["values"] = combo_values
+        return opts
+
+    def _on_naming_style_selected(self, event=None):
+        val = self.naming_style_var.get()
+        source_path = self.file_path_var.get().strip()
+        orig_name = os.path.basename(source_path) if source_path else "filename.txt"
+        opts = self._compute_naming_options(orig_name)
+
+        if val.startswith("Rule Prefix"):
+            self.user_custom_filename = False
+            self.dest_filename_var.set(opts["rule_prefix"])
+        elif val.startswith("Rule Suffix"):
+            self.user_custom_filename = False
+            self.dest_filename_var.set(opts["rule_suffix"])
+        elif val.startswith("Filtered"):
+            self.user_custom_filename = False
+            self.dest_filename_var.set(opts["filtered"])
+        elif val.startswith("Classic"):
+            self.user_custom_filename = False
+            self.dest_filename_var.set(opts["classic"])
+        elif val == "Custom / Manual":
+            self.user_custom_filename = True
+
+        self._update_destination_preview()
+
+    def _on_manual_filename_edit(self, event=None):
+        self.user_custom_filename = True
+        self.naming_style_var.set("Custom / Manual")
+        self._update_destination_preview()
+
+    def _reset_filename_to_auto(self):
+        self.user_custom_filename = False
+        source_path = self.file_path_var.get().strip()
+        orig_name = os.path.basename(source_path) if source_path else "filename.txt"
+        opts = self._compute_naming_options(orig_name)
+        self.naming_style_var.set(f"Rule Prefix: {opts['rule_prefix']}")
+        self.dest_filename_var.set(opts["rule_prefix"])
+        self._refresh_naming_combo_values()
+        self._update_destination_preview()
+
+    def _on_rule_change_event(self):
+        self._update_destination_preview()
+
+    def _update_destination_preview(self):
+        if getattr(self, "_updating_naming", False):
+            return
+        self._updating_naming = True
+        try:
+            source_path = self.file_path_var.get().strip()
+            orig_name = os.path.basename(source_path) if source_path else "filename.txt"
+
+            opts = self._refresh_naming_combo_values()
+
+            if not getattr(self, "user_custom_filename", False):
+                current_style = self.naming_style_var.get()
+                if current_style.startswith("Rule Suffix"):
+                    self.dest_filename_var.set(opts["rule_suffix"])
+                    self.naming_style_var.set(f"Rule Suffix: {opts['rule_suffix']}")
+                elif current_style.startswith("Filtered"):
+                    self.dest_filename_var.set(opts["filtered"])
+                    self.naming_style_var.set(f"Filtered: {opts['filtered']}")
+                elif current_style.startswith("Classic"):
+                    self.dest_filename_var.set(opts["classic"])
+                    self.naming_style_var.set(f"Classic: {opts['classic']}")
+                else:
+                    self.dest_filename_var.set(opts["rule_prefix"])
+                    self.naming_style_var.set(f"Rule Prefix: {opts['rule_prefix']}")
+
+            dest_dir = self.dest_folder_var.get().strip()
+            if not dest_dir and source_path:
+                dest_dir = os.path.dirname(source_path)
+            if not dest_dir:
+                dest_dir = "[Source Folder]"
+
+            filename = self.dest_filename_var.get().strip()
+            if not filename:
+                filename = opts["rule_prefix"]
+
+            if self.split_enabled_var.get():
+                base, ext = os.path.splitext(filename)
+                preview_fname = f"{base}_part1{ext} (+ _part2{ext}...)"
+            else:
+                preview_fname = filename
+
+            if not source_path:
+                self.preview_label.config(
+                    text=f"Select source file to preview destination path (e.g. {preview_fname})",
+                    foreground="#666666",
+                )
+            else:
+                full_path = os.path.join(dest_dir, preview_fname)
+                self.preview_label.config(text=full_path, foreground="#0055d4")
+        finally:
+            self._updating_naming = False
+
     def _browse_source_file(self):
         chosen_path = filedialog.askopenfilename(
             title="Select Text / Wordlist File",
@@ -521,6 +730,7 @@ class LengthFilterApp:
                 foreground="#000000",
             )
             self._log(f"Selected source: {chosen_path} ({sz_mb:.2f} MB)", tag="info")
+            self._update_destination_preview()
 
     def _browse_dest_folder(self):
         current_dir = self.dest_folder_var.get().strip()
@@ -536,6 +746,7 @@ class LengthFilterApp:
         if chosen_dir:
             self.dest_folder_var.set(chosen_dir)
             self._log(f"Selected destination directory: {chosen_dir}", tag="subtle")
+            self._update_destination_preview()
 
     def _get_validator(self):
         mode = self.charset_var.get()
@@ -712,13 +923,23 @@ class LengthFilterApp:
                     messagebox.showerror("Error", "Split file size must be a positive integer in MB.")
                     return
 
-        # Destination folder setup
+        # Destination folder & custom output filename setup
         source_dir, original_name = os.path.split(source_path)
         dest_dir = self.dest_folder_var.get().strip()
         if not dest_dir or not os.path.isdir(dest_dir):
             dest_dir = source_dir
 
-        output_filename = f"lengthfilter_{original_name}"
+        output_filename = self.dest_filename_var.get().strip()
+        if not output_filename:
+            opts = self._compute_naming_options(original_name)
+            output_filename = opts["rule_prefix"]
+
+        # Ensure filename has an extension if omitted
+        base_f, ext_f = os.path.splitext(output_filename)
+        if not ext_f:
+            _, src_ext = os.path.splitext(original_name)
+            output_filename = f"{output_filename}{src_ext or '.txt'}"
+
         output_path = os.path.join(dest_dir, output_filename)
         mode = self.mode_var.get()
         dedup = bool(self.unique_var.get())
@@ -736,7 +957,8 @@ class LengthFilterApp:
         engine_name = "Native C Acceleration (fastfilter.dll)" if (C_FILTER_FUNC and charset_mode in ("all", "letters", "alnum", "ascii_printable")) else "Python Streaming Engine"
 
         self._log(f"======================================================", tag="info")
-        self._log(f"Starting filter task for '{original_name}' ({total_file_size / (1024*1024):.2f} MB)", tag="info")
+        self._log(f"Starting filter task: '{original_name}' -> '{output_filename}' ({total_file_size / (1024*1024):.2f} MB)", tag="info")
+        self._log(f"  • Output destination: {output_path}", tag="subtle")
         self._log(f"  • Rules: length {min_len}-{max_len} | charset='{charset_mode}' | unique={dedup}", tag="subtle")
         if split_lines > 0 or split_bytes > 0:
             split_info = f"{split_lines:,} words/part" if split_lines > 0 else f"{split_bytes/(1024*1024):.0f} MB/part"

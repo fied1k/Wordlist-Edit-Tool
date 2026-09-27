@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-09-27
+
+### Added / Changed
+- Add live destination filename preview, customizable output file naming, and rule-based dynamic naming presets
+
+
 ## [1.3.0] - 2026-09-27
 
 ### Added / Changed
