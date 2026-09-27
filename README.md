@@ -1,6 +1,6 @@
 # WordLengthFilter ⚡
 
-[![Release](https://img.shields.io/badge/version-v1.1.0-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/version-v1.2.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010%20(x64)-0078D6.svg?logo=windows)](#)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](#)
 [![C Engine](https://img.shields.io/badge/Engine-Native%20C%20(GCC%2016)-00599C.svg?logo=c)](#)
@@ -31,7 +31,8 @@ flowchart TD
         TOKENIZER["Fast Tokenizer & Delimiter\nStrip Leading/Trailing Symbols"]
         RULE_ENGINE["Character Rule Validator\n(Letters / Alnum / ASCII Printable / Standard)"]
         HASHSET["64-bit FNV-1a Hash Set\n(Exact / Lower Deduplication)"]
-        BUF_OUT["4 MB Buffered Output\n(List / Preserve Line Format)"]
+        ROLLOVER["Output Writer & Chunk Rollover\n(Split by Lines or MB on-the-fly)"]
+        BUF_OUT["4 MB Buffered Output\n(_part1, _part2... or Single File)"]
     end
 
     GUI -->|Worker Thread| WORKER
@@ -42,7 +43,8 @@ flowchart TD
     BUF_IN --> TOKENIZER
     TOKENIZER --> RULE_ENGINE
     RULE_ENGINE --> HASHSET
-    HASHSET --> BUF_OUT
+    HASHSET --> ROLLOVER
+    ROLLOVER --> BUF_OUT
 ```
 
 ---
@@ -53,6 +55,7 @@ flowchart TD
 - **💾 Low Memory Footprint**: Filters 50M+ line wordlists using only ~8–64 MB of RAM (compared to 8–16 GB in pure Python).
 - **🖥️ Non-Blocking Windows GUI**: Operations run on background worker threads—the UI remains smooth and responsive without freezing.
 - **📁 Destination Folder Selector**: Custom destination directory chooser with automatic fallback to the source file directory.
+- **✂️ Output Splitting & Chunk Rollover**: Divide massive dictionaries into manageable parts (e.g. 5,000,000 words or 1,024 MB per part) on-the-fly **without breaking global deduplication** or doubling disk I/O.
 - **⚡ Built-in Wi-Fi / Security Presets**:
   - **WPA2 Standard (8-63 chars, ASCII Printable)**: Filters strictly to valid IEEE 802.11i Wi-Fi passphrases.
   - **WPA2 Typical (8-16 chars, ASCII Printable)**: High-probability search range for standard consumer routers.
@@ -82,7 +85,7 @@ flowchart TD
 ## CLI Usage (`fastfilter.exe`)
 
 ```
-fastfilter.exe <source_file> <output_file> [min_len] [max_len] [charset_mode] [output_mode] [dedup]
+fastfilter.exe <source_file> <output_file> [min_len] [max_len] [charset_mode] [output_mode] [dedup] [split_lines] [split_bytes]
 ```
 
 ### Parameters
@@ -96,6 +99,8 @@ fastfilter.exe <source_file> <output_file> [min_len] [max_len] [charset_mode] [o
 | `[charset_mode]`| Optional | `0` | `0` = All words, `1` = Letters only, `2` = Alphanumeric only, `3` = ASCII printable only (32-126, WPA2) |
 | `[output_mode]` | Optional | `0` | `0` = One word per line, `1` = Preserve line structure |
 | `[dedup]` | Optional | `0` | `0` = Keep duplicates, `1` = Unique words only |
+| `[split_lines]` | Optional | `0` | Max words/lines per output file part (`0` = disabled) |
+| `[split_bytes]` | Optional | `0` | Max bytes per output file part, e.g. `1073741824` = 1 GB (`0` = disabled) |
 
 ### Practical Examples
 
@@ -106,8 +111,8 @@ fastfilter.exe <source_file> <output_file> [min_len] [max_len] [charset_mode] [o
 # 2. Filter typical WPA2 passphrases (8-16 characters, ASCII printable)
 .\dist\fastfilter.exe rockyou.txt wpa2_typical.txt 8 16 3 0 1
 
-# 3. Extract strictly alphabetic words between 4 and 10 characters
-.\dist\fastfilter.exe raw_corpus.txt clean_words.txt 4 10 1 0 1
+# 3. Filter massive 50 GB wordlist and split into 10,000,000-word parts with global deduplication
+.\dist\fastfilter.exe huge_dump.txt filtered.txt 8 20 0 0 1 10000000 0
 
 # 4. Filter alphanumeric passwords (exclude punctuation) of length 6 to 16
 .\dist\fastfilter.exe passwords.txt alnum_passwords.txt 6 16 2 0 0
@@ -139,16 +144,16 @@ This automatically compiles:
 This repository includes automated Semantic Versioning (SemVer) tooling:
 
 ### Bumping the Version
-Use the PowerShell wrapper or Python script:
+Use the automated release script:
 ```powershell
-# Bump patch version (e.g. 1.1.0 -> 1.1.1) and create a git commit + tag
-.\scripts\publish_release.ps1 patch -Notes "Bug fixes and performance tweaks"
+# Publish patch iteration (e.g. 1.2.0 -> 1.2.1)
+python scripts/publish_release.py patch --notes "Performance tweaks"
 
-# Bump minor version (e.g. 1.1.0 -> 1.2.0) for new features
-.\scripts\publish_release.ps1 minor -Notes "Added new dictionary presets"
+# Publish minor iteration (e.g. 1.2.0 -> 1.3.0)
+python scripts/publish_release.py minor --notes "Added new filter presets"
 
-# Bump major version (e.g. 1.2.0 -> 2.0.0) for breaking changes
-.\scripts\publish_release.ps1 major -Notes "Major architecture upgrade"
+# Publish major release (e.g. 1.2.0 -> 2.0.0)
+python scripts/publish_release.py major --notes "Major architecture overhaul"
 ```
 
 ---

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-09-27
+
+### Added / Changed
+- Add on-the-fly output splitting and rollover (by word count or file size) with global deduplication across chunks
+
+
 ## [1.1.0] - 2026-09-27
 
 ### Added / Changed

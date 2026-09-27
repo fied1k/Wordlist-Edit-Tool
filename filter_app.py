@@ -6,7 +6,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -29,6 +29,8 @@ try:
                 ctypes.c_int,      # charset_mode (0=all, 1=letters, 2=alnum, 3=ascii_printable)
                 ctypes.c_int,      # output_mode  (0=list, 1=preserve)
                 ctypes.c_int,      # dedup (0 or 1)
+                ctypes.c_longlong, # split_lines (0=disabled)
+                ctypes.c_longlong, # split_bytes (0=disabled)
             ]
             C_FILTER_FUNC.restype = ctypes.c_longlong
             C_FILTER_IS_WIDE = True
@@ -42,6 +44,8 @@ try:
                 ctypes.c_int,
                 ctypes.c_int,
                 ctypes.c_int,
+                ctypes.c_longlong,
+                ctypes.c_longlong,
             ]
             C_FILTER_FUNC.restype = ctypes.c_longlong
             C_FILTER_IS_WIDE = False
@@ -53,8 +57,8 @@ class LengthFilterApp:
     def __init__(self, root):
         self.root = root
         self.root.title(f"Word Length & Character Filter v{__version__}")
-        self.root.geometry("580x650")
-        self.root.minsize(540, 600)
+        self.root.geometry("600x720")
+        self.root.minsize(560, 680)
         self.root.resizable(True, True)
 
         # Style configuration
@@ -71,6 +75,13 @@ class LengthFilterApp:
         self.unique_var = tk.BooleanVar(value=False)
         self.charset_var = tk.StringVar(value="all")
         self.custom_regex_var = tk.StringVar(value=r"^[a-zA-Z0-9_-]+$")
+
+        # Output splitting state variables
+        self.split_enabled_var = tk.BooleanVar(value=False)
+        self.split_mode_var = tk.StringVar(value="lines")  # "lines" or "mb"
+        self.split_lines_var = tk.StringVar(value="5000000")
+        self.split_mb_var = tk.StringVar(value="1024")
+
         self.is_processing = False
 
         self._build_ui()
@@ -81,7 +92,7 @@ class LengthFilterApp:
 
         # 1. Source File Selection
         src_frame = ttk.LabelFrame(container, text="1. Source Wordlist File", padding="8")
-        src_frame.pack(fill=tk.X, pady=(0, 8))
+        src_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Entry(src_frame, textvariable=self.file_path_var).pack(
             side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True
@@ -92,7 +103,7 @@ class LengthFilterApp:
 
         # 2. Destination Folder Selection
         dest_frame = ttk.LabelFrame(container, text="2. Destination Folder (Optional)", padding="8")
-        dest_frame.pack(fill=tk.X, pady=(0, 8))
+        dest_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Entry(dest_frame, textvariable=self.dest_folder_var).pack(
             side=tk.LEFT, padx=(0, 8), fill=tk.X, expand=True
@@ -103,7 +114,7 @@ class LengthFilterApp:
 
         # 3. Rule Presets
         preset_frame = ttk.LabelFrame(container, text="3. Quick Presets", padding="8")
-        preset_frame.pack(fill=tk.X, pady=(0, 8))
+        preset_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Label(preset_frame, text="Select Preset:").pack(side=tk.LEFT, padx=(4, 8))
         self.preset_combo = ttk.Combobox(
@@ -124,7 +135,7 @@ class LengthFilterApp:
 
         # 4. Length Range Controls
         len_frame = ttk.LabelFrame(container, text="4. Character Length Range", padding="8")
-        len_frame.pack(fill=tk.X, pady=(0, 8))
+        len_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Label(len_frame, text="Minimum:").grid(row=0, column=0, sticky=tk.W, padx=4)
         ttk.Spinbox(
@@ -138,7 +149,7 @@ class LengthFilterApp:
 
         # 5. Character Filter Rules
         char_frame = ttk.LabelFrame(container, text="5. Character Rules", padding="8")
-        char_frame.pack(fill=tk.X, pady=(0, 8))
+        char_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Radiobutton(
             char_frame,
@@ -185,9 +196,9 @@ class LengthFilterApp:
         )
         self.regex_entry.grid(row=4, column=1, sticky=tk.W, padx=(8, 0), pady=1)
 
-        # 6. Output Options
-        opts_frame = ttk.LabelFrame(container, text="6. Output Options", padding="8")
-        opts_frame.pack(fill=tk.X, pady=(0, 8))
+        # 6. Output Options & Deduplication
+        opts_frame = ttk.LabelFrame(container, text="6. Output Formatting & Deduplication", padding="8")
+        opts_frame.pack(fill=tk.X, pady=(0, 6))
 
         ttk.Radiobutton(
             opts_frame,
@@ -207,19 +218,83 @@ class LengthFilterApp:
             opts_frame,
             text="Remove duplicate words (deduplication)",
             variable=self.unique_var,
-        ).pack(anchor=tk.W, pady=(3, 0))
+        ).pack(anchor=tk.W, pady=(2, 0))
 
-        # 7. Action Button & Status
+        # 7. Output Splitting / Rollover Frame (For Very Large Files)
+        split_frame = ttk.LabelFrame(container, text="7. Output Splitting (For Multi-Gigabyte Wordlists)", padding="8")
+        split_frame.pack(fill=tk.X, pady=(0, 8))
+
+        ttk.Checkbutton(
+            split_frame,
+            text="Split output into parts (_part1, _part2... with global deduplication)",
+            variable=self.split_enabled_var,
+            command=self._toggle_split_controls,
+        ).pack(anchor=tk.W, pady=(0, 4))
+
+        split_opts_frame = ttk.Frame(split_frame)
+        split_opts_frame.pack(fill=tk.X, padx=16)
+
+        ttk.Radiobutton(
+            split_opts_frame,
+            text="By word count:",
+            variable=self.split_mode_var,
+            value="lines",
+            command=self._toggle_split_controls,
+        ).grid(row=0, column=0, sticky=tk.W, pady=1)
+
+        self.split_lines_entry = ttk.Spinbox(
+            split_opts_frame,
+            from_=1000,
+            to=1000000000,
+            textvariable=self.split_lines_var,
+            width=12,
+            state="disabled",
+        )
+        self.split_lines_entry.grid(row=0, column=1, sticky=tk.W, padx=(8, 8), pady=1)
+        ttk.Label(split_opts_frame, text="words / lines per part").grid(row=0, column=2, sticky=tk.W, pady=1)
+
+        ttk.Radiobutton(
+            split_opts_frame,
+            text="By file size:",
+            variable=self.split_mode_var,
+            value="mb",
+            command=self._toggle_split_controls,
+        ).grid(row=1, column=0, sticky=tk.W, pady=1)
+
+        self.split_mb_entry = ttk.Spinbox(
+            split_opts_frame,
+            from_=10,
+            to=1000000,
+            textvariable=self.split_mb_var,
+            width=12,
+            state="disabled",
+        )
+        self.split_mb_entry.grid(row=1, column=1, sticky=tk.W, padx=(8, 8), pady=1)
+        ttk.Label(split_opts_frame, text="MB per part").grid(row=1, column=2, sticky=tk.W, pady=1)
+
+        # 8. Action Button & Status
         self.run_btn = ttk.Button(
             container, text="Filter and Save", command=self._process_file
         )
-        self.run_btn.pack(fill=tk.X, pady=(2, 6))
+        self.run_btn.pack(fill=tk.X, pady=(2, 4))
 
         engine_info = "Native C Acceleration" if C_FILTER_FUNC else "Standard Engine"
         self.status_label = ttk.Label(
             container, text=f"Ready ({engine_info}). Select a source file to begin.", foreground="#555555"
         )
         self.status_label.pack(anchor=tk.W)
+
+    def _toggle_split_controls(self):
+        if self.split_enabled_var.get():
+            if self.split_mode_var.get() == "lines":
+                self.split_lines_entry.config(state="normal")
+                self.split_mb_entry.config(state="disabled")
+            else:
+                self.split_lines_entry.config(state="disabled")
+                self.split_mb_entry.config(state="normal")
+        else:
+            self.split_lines_entry.config(state="disabled")
+            self.split_mb_entry.config(state="disabled")
 
     def _on_preset_change(self, event=None):
         choice = self.preset_var.get()
@@ -262,7 +337,6 @@ class LengthFilterApp:
 
     def _on_rule_manual_change(self):
         self._toggle_custom_regex()
-        # Reflect manual customization in preset dropdown
         current_rule = self.charset_var.get()
         min_v = self.min_len_var.get()
         max_v = self.max_len_var.get()
@@ -291,7 +365,6 @@ class LengthFilterApp:
         )
         if chosen_path:
             self.file_path_var.set(chosen_path)
-            # Default destination folder to source file directory if not already set
             if not self.dest_folder_var.get().strip():
                 self.dest_folder_var.set(os.path.dirname(chosen_path))
             self.status_label.config(
@@ -322,7 +395,6 @@ class LengthFilterApp:
             pattern = re.compile(r"^[a-zA-Z0-9]+$")
             return lambda word: bool(pattern.match(word))
         elif mode == "ascii_printable":
-            # All ASCII characters between 32 (space) and 126 (tilde)
             pattern = re.compile(r"^[\x20-\x7E]+$")
             return lambda word: bool(pattern.match(word))
         elif mode == "custom":
@@ -334,7 +406,7 @@ class LengthFilterApp:
                 raise ValueError(f"Invalid custom regular expression:\n{e}")
         return lambda word: True
 
-    def _run_python_filter(self, source_path, output_path, min_len, max_len, charset_mode, mode, dedup):
+    def _run_python_filter(self, source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes):
         char_validator = self._get_validator()
         if charset_mode == "ascii_printable":
             word_token_pattern = re.compile(r"\s+")
@@ -344,37 +416,67 @@ class LengthFilterApp:
         total_kept = 0
         seen_words = set()
 
-        with open(source_path, "r", encoding="utf-8", errors="replace") as in_f, \
-             open(output_path, "w", encoding="utf-8", errors="replace") as out_f:
-            if mode == "list":
-                for line in in_f:
-                    tokens = word_token_pattern.split(line.strip())
-                    for token in tokens:
-                        clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
-                        if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
-                            if dedup:
-                                normalized = clean_token if charset_mode == "ascii_printable" else clean_token.lower()
-                                if normalized in seen_words:
-                                    continue
-                                seen_words.add(normalized)
-                            out_f.write(clean_token + "\n")
-                            total_kept += 1
-            else:
-                for line in in_f:
-                    words = word_token_pattern.split(line.strip())
-                    kept_in_line = []
-                    for token in words:
-                        clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
-                        if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
-                            if dedup:
-                                normalized = clean_token if charset_mode == "ascii_printable" else clean_token.lower()
-                                if normalized in seen_words:
-                                    continue
-                                seen_words.add(normalized)
-                            kept_in_line.append(clean_token)
-                            total_kept += 1
-                    if kept_in_line:
-                        out_f.write(" ".join(kept_in_line) + "\n")
+        base, ext = os.path.splitext(output_path)
+        is_split = split_lines > 0 or split_bytes > 0
+        part_num = 1
+        curr_lines = 0
+        curr_bytes = 0
+
+        def get_current_out_path(p_idx):
+            return f"{base}_part{p_idx}{ext}" if is_split else output_path
+
+        out_f = open(get_current_out_path(part_num), "w", encoding="utf-8", errors="replace")
+
+        def check_rollover():
+            nonlocal out_f, part_num, curr_lines, curr_bytes
+            if is_split:
+                if (split_lines > 0 and curr_lines >= split_lines) or (split_bytes > 0 and curr_bytes >= split_bytes):
+                    out_f.close()
+                    part_num += 1
+                    curr_lines = 0
+                    curr_bytes = 0
+                    out_f = open(get_current_out_path(part_num), "w", encoding="utf-8", errors="replace")
+
+        try:
+            with open(source_path, "r", encoding="utf-8", errors="replace") as in_f:
+                if mode == "list":
+                    for line in in_f:
+                        tokens = word_token_pattern.split(line.strip())
+                        for token in tokens:
+                            clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
+                            if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
+                                if dedup:
+                                    normalized = clean_token if charset_mode == "ascii_printable" else clean_token.lower()
+                                    if normalized in seen_words:
+                                        continue
+                                    seen_words.add(normalized)
+                                check_rollover()
+                                out_f.write(clean_token + "\n")
+                                curr_lines += 1
+                                curr_bytes += len(clean_token.encode("utf-8")) + 1
+                                total_kept += 1
+                else:
+                    for line in in_f:
+                        words = word_token_pattern.split(line.strip())
+                        kept_in_line = []
+                        for token in words:
+                            clean_token = token if charset_mode == "ascii_printable" else token.strip("'-_")
+                            if min_len <= len(clean_token) <= max_len and char_validator(clean_token):
+                                if dedup:
+                                    normalized = clean_token if charset_mode == "ascii_printable" else clean_token.lower()
+                                    if normalized in seen_words:
+                                        continue
+                                    seen_words.add(normalized)
+                                kept_in_line.append(clean_token)
+                                total_kept += 1
+                        if kept_in_line:
+                            check_rollover()
+                            line_str = " ".join(kept_in_line) + "\n"
+                            out_f.write(line_str)
+                            curr_lines += 1
+                            curr_bytes += len(line_str.encode("utf-8"))
+        finally:
+            out_f.close()
 
         return total_kept
 
@@ -416,6 +518,28 @@ class LengthFilterApp:
                 messagebox.showerror("Regex Error", str(err))
                 return
 
+        # Validate splitting thresholds
+        split_lines = 0
+        split_bytes = 0
+        if self.split_enabled_var.get():
+            if self.split_mode_var.get() == "lines":
+                try:
+                    split_lines = int(self.split_lines_var.get())
+                    if split_lines < 1:
+                        raise ValueError()
+                except ValueError:
+                    messagebox.showerror("Error", "Split word count must be a positive integer.")
+                    return
+            else:
+                try:
+                    split_mb = int(self.split_mb_var.get())
+                    if split_mb < 1:
+                        raise ValueError()
+                    split_bytes = split_mb * 1024 * 1024
+                except ValueError:
+                    messagebox.showerror("Error", "Split file size must be a positive integer in MB.")
+                    return
+
         # Destination folder setup
         source_dir, original_name = os.path.split(source_path)
         dest_dir = self.dest_folder_var.get().strip()
@@ -450,7 +574,7 @@ class LengthFilterApp:
                     c_dedup = 1 if dedup else 0
 
                     if C_FILTER_IS_WIDE:
-                        res = C_FILTER_FUNC(source_path, output_path, min_len, max_len, c_charset, c_mode, c_dedup)
+                        res = C_FILTER_FUNC(source_path, output_path, min_len, max_len, c_charset, c_mode, c_dedup, split_lines, split_bytes)
                     else:
                         res = C_FILTER_FUNC(
                             source_path.encode("utf-8"),
@@ -460,6 +584,8 @@ class LengthFilterApp:
                             c_charset,
                             c_mode,
                             c_dedup,
+                            split_lines,
+                            split_bytes,
                         )
 
                     if res < 0:
@@ -467,16 +593,16 @@ class LengthFilterApp:
                     total_kept = res
                 else:
                     total_kept = self._run_python_filter(
-                        source_path, output_path, min_len, max_len, charset_mode, mode, dedup
+                        source_path, output_path, min_len, max_len, charset_mode, mode, dedup, split_lines, split_bytes
                     )
             except Exception as e:
                 err = str(e)
 
-            self.root.after(0, lambda: self._on_complete(err, total_kept, output_filename, dest_dir))
+            self.root.after(0, lambda: self._on_complete(err, total_kept, output_filename, dest_dir, split_lines > 0 or split_bytes > 0))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _on_complete(self, err, total_kept, output_filename, directory):
+    def _on_complete(self, err, total_kept, output_filename, directory, was_split):
         self.is_processing = False
         self.run_btn.config(state="normal", text="Filter and Save")
 
@@ -484,17 +610,25 @@ class LengthFilterApp:
             self.status_label.config(text=f"Error: {err}", foreground="#cc0000")
             messagebox.showerror("Processing Error", f"An error occurred while processing:\n{err}")
         else:
-            self.status_label.config(
-                text=f"Done! {total_kept:,} words saved to {output_filename}",
-                foreground="#008000",
-            )
-            messagebox.showinfo(
-                "Success",
-                f"Filtered list saved successfully!\n\n"
-                f"Retained words: {total_kept:,}\n"
-                f"Output file: {output_filename}\n"
-                f"Destination folder: {directory}",
-            )
+            if was_split:
+                status_txt = f"Done! {total_kept:,} words saved across split parts (_part1, _part2...)"
+                msg_body = (
+                    f"Filtered list saved successfully across multiple parts!\n\n"
+                    f"Total retained words: {total_kept:,}\n"
+                    f"Output parts pattern: {output_filename.replace('.', '_partN.')}\n"
+                    f"Destination folder: {directory}"
+                )
+            else:
+                status_txt = f"Done! {total_kept:,} words saved to {output_filename}"
+                msg_body = (
+                    f"Filtered list saved successfully!\n\n"
+                    f"Retained words: {total_kept:,}\n"
+                    f"Output file: {output_filename}\n"
+                    f"Destination folder: {directory}"
+                )
+
+            self.status_label.config(text=status_txt, foreground="#008000")
+            messagebox.showinfo("Success", msg_body)
 
 
 if __name__ == "__main__":
