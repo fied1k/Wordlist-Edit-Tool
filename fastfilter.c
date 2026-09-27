@@ -7,10 +7,10 @@
 #include <wchar.h>
 #endif
 
-#define FASTFILTER_VERSION "1.0.0"
+#define FASTFILTER_VERSION "1.1.0"
 #define BUF_SIZE (1024 * 1024 * 4) // 4 MB I/O streaming buffer
 
-// 64-bit FNV-1a Hash (Case-insensitive)
+// 64-bit FNV-1a Hash (Case-insensitive for standard words)
 static inline uint64_t hash_str_lower(const char *str, int len) {
     uint64_t hash = 14695981039346656037ULL;
     for (int i = 0; i < len; i++) {
@@ -18,6 +18,16 @@ static inline uint64_t hash_str_lower(const char *str, int len) {
         hash *= 1099511628211ULL;
     }
     return hash == 0 ? 1 : hash; // 0 is reserved for empty slot
+}
+
+// 64-bit FNV-1a Hash (Exact case-sensitive for WPA2 keys/passwords)
+static inline uint64_t hash_str_exact(const char *str, int len) {
+    uint64_t hash = 14695981039346656037ULL;
+    for (int i = 0; i < len; i++) {
+        hash ^= (uint64_t)(unsigned char)str[i];
+        hash *= 1099511628211ULL;
+    }
+    return hash == 0 ? 1 : hash;
 }
 
 // Dynamic Open-Addressing Hash Set for 64-bit hashes
@@ -54,7 +64,6 @@ static void hashset_resize(HashSet *set) {
     set->capacity *= 2;
     set->table = (uint64_t*)calloc(set->capacity, sizeof(uint64_t));
     if (!set->table) {
-        // Fallback: restore old table if out of memory
         set->capacity = old_cap;
         set->table = old_table;
         return;
@@ -90,9 +99,13 @@ static int hashset_contains_or_add(HashSet *set, uint64_t h) {
     return 0; // newly added
 }
 
-// Token delimiter helper: words consist of alphanumeric characters, hyphens, apostrophes, and underscores
+// Token delimiter helpers
 static inline int is_token_char(unsigned char c) {
     return isalnum(c) || c == '-' || c == '\'' || c == '_';
+}
+
+static inline int is_whitespace(unsigned char c) {
+    return c == ' ' || c == '\t' || c == '\r' || c == '\n';
 }
 
 // Core processing loop
@@ -101,7 +114,7 @@ static long long process_file_internal(
     FILE *dst,
     int min_len,
     int max_len,
-    int charset_mode, // 0 = all, 1 = letters only, 2 = alphanumeric only
+    int charset_mode, // 0 = all, 1 = letters only, 2 = alphanumeric only, 3 = ASCII printable (32-126)
     int output_mode,  // 0 = list, 1 = preserve lines
     int dedup
 ) {
@@ -120,77 +133,121 @@ static long long process_file_internal(
         char *ptr = line;
         int first_in_line = 1;
 
-        while (*ptr) {
-            // Skip non-token delimiters (whitespace, punctuation, symbols)
-            while (*ptr && !is_token_char((unsigned char)*ptr)) {
-                ptr++;
-            }
-            if (!*ptr) break;
+        if (charset_mode == 3) {
+            // Mode 3: ASCII Printable (32-126) for WPA2 Wi-Fi Passphrases
+            // Words/keys are whitespace-separated tokens; symbols and punctuation are preserved.
+            while (*ptr) {
+                while (*ptr && is_whitespace((unsigned char)*ptr)) {
+                    ptr++;
+                }
+                if (!*ptr) break;
 
-            // Extract token
-            int w_len = 0;
-            while (*ptr && is_token_char((unsigned char)*ptr) && w_len < (int)sizeof(word) - 1) {
-                word[w_len++] = *ptr++;
-            }
-            word[w_len] = '\0';
+                int w_len = 0;
+                int is_ascii = 1;
+                while (*ptr && !is_whitespace((unsigned char)*ptr) && w_len < (int)sizeof(word) - 1) {
+                    unsigned char c = (unsigned char)*ptr++;
+                    if (c < 32 || c > 126) {
+                        is_ascii = 0;
+                    }
+                    word[w_len++] = c;
+                }
+                word[w_len] = '\0';
 
-            // Trim leading/trailing hyphens, quotes, underscores
-            int start = 0;
-            while (start < w_len && (word[start] == '\'' || word[start] == '-' || word[start] == '_')) {
-                start++;
-            }
-            int end = w_len - 1;
-            while (end >= start && (word[end] == '\'' || word[end] == '-' || word[end] == '_')) {
-                end--;
-            }
+                if (!is_ascii) continue; // Must be strictly ASCII printable
+                if (w_len < min_len || w_len > max_len) continue;
 
-            int clean_len = (end >= start) ? (end - start + 1) : 0;
-            if (clean_len < min_len || clean_len > max_len) {
-                continue;
-            }
-
-            word[start + clean_len] = '\0';
-            char *clean_word = word + start;
-
-            // Validate character set rules on clean token
-            if (charset_mode == 1) { // letters only
-                int valid = 1;
-                for (int i = 0; i < clean_len; i++) {
-                    if (!isalpha((unsigned char)clean_word[i])) {
-                        valid = 0;
-                        break;
+                // Deduplication (exact case-sensitive for WPA2 passphrases)
+                if (dedup && set) {
+                    uint64_t h = hash_str_exact(word, w_len);
+                    if (hashset_contains_or_add(set, h)) {
+                        continue;
                     }
                 }
-                if (!valid) continue;
-            } else if (charset_mode == 2) { // alphanumeric only
-                int valid = 1;
-                for (int i = 0; i < clean_len; i++) {
-                    if (!isalnum((unsigned char)clean_word[i])) {
-                        valid = 0;
-                        break;
-                    }
-                }
-                if (!valid) continue;
-            }
 
-            // Deduplication check
-            if (dedup && set) {
-                uint64_t h = hash_str_lower(clean_word, clean_len);
-                if (hashset_contains_or_add(set, h)) {
+                if (output_mode == 0) {
+                    fputs(word, dst);
+                    fputc('\n', dst);
+                } else {
+                    if (!first_in_line) fputc(' ', dst);
+                    fputs(word, dst);
+                    first_in_line = 0;
+                }
+                total_kept++;
+            }
+        } else {
+            // Standard word modes: 0 = all, 1 = letters only, 2 = alphanumeric only
+            while (*ptr) {
+                // Skip non-token delimiters (whitespace, punctuation, symbols)
+                while (*ptr && !is_token_char((unsigned char)*ptr)) {
+                    ptr++;
+                }
+                if (!*ptr) break;
+
+                // Extract token
+                int w_len = 0;
+                while (*ptr && is_token_char((unsigned char)*ptr) && w_len < (int)sizeof(word) - 1) {
+                    word[w_len++] = *ptr++;
+                }
+                word[w_len] = '\0';
+
+                // Trim leading/trailing hyphens, quotes, underscores
+                int start = 0;
+                while (start < w_len && (word[start] == '\'' || word[start] == '-' || word[start] == '_')) {
+                    start++;
+                }
+                int end = w_len - 1;
+                while (end >= start && (word[end] == '\'' || word[end] == '-' || word[end] == '_')) {
+                    end--;
+                }
+
+                int clean_len = (end >= start) ? (end - start + 1) : 0;
+                if (clean_len < min_len || clean_len > max_len) {
                     continue;
                 }
-            }
 
-            // Write output
-            if (output_mode == 0) { // list mode (1 word per line)
-                fputs(clean_word, dst);
-                fputc('\n', dst);
-            } else { // preserve lines mode
-                if (!first_in_line) fputc(' ', dst);
-                fputs(clean_word, dst);
-                first_in_line = 0;
+                word[start + clean_len] = '\0';
+                char *clean_word = word + start;
+
+                // Validate character set rules on clean token
+                if (charset_mode == 1) { // letters only
+                    int valid = 1;
+                    for (int i = 0; i < clean_len; i++) {
+                        if (!isalpha((unsigned char)clean_word[i])) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (!valid) continue;
+                } else if (charset_mode == 2) { // alphanumeric only
+                    int valid = 1;
+                    for (int i = 0; i < clean_len; i++) {
+                        if (!isalnum((unsigned char)clean_word[i])) {
+                            valid = 0;
+                            break;
+                        }
+                    }
+                    if (!valid) continue;
+                }
+
+                // Deduplication check
+                if (dedup && set) {
+                    uint64_t h = hash_str_lower(clean_word, clean_len);
+                    if (hashset_contains_or_add(set, h)) {
+                        continue;
+                    }
+                }
+
+                // Write output
+                if (output_mode == 0) { // list mode (1 word per line)
+                    fputs(clean_word, dst);
+                    fputc('\n', dst);
+                } else { // preserve lines mode
+                    if (!first_in_line) fputc(' ', dst);
+                    fputs(clean_word, dst);
+                    first_in_line = 0;
+                }
+                total_kept++;
             }
-            total_kept++;
         }
 
         if (output_mode == 1 && !first_in_line) {
@@ -278,9 +335,12 @@ int main(int argc, char **argv) {
         printf("  <output_file>   Path to destination output file\n");
         printf("  [min_len]       Minimum length (default: 3)\n");
         printf("  [max_len]       Maximum length (default: 12)\n");
-        printf("  [charset_mode]  0 = all words, 1 = letters only, 2 = alphanumeric only (default: 0)\n");
-        printf("  [output_mode]   0 = one word per line, 1 = preserve lines (default: 0)\n");
-        printf("  [dedup]         0 = keep duplicates, 1 = unique words only (default: 0)\n");
+        printf("  [charset_mode]  0 = all words (default)\n");
+        printf("                  1 = letters only\n");
+        printf("                  2 = alphanumeric only\n");
+        printf("                  3 = ASCII printable only (32-126, WPA2 standard)\n");
+        printf("  [output_mode]   0 = one word per line (default), 1 = preserve lines\n");
+        printf("  [dedup]         0 = keep duplicates (default), 1 = unique words only\n");
         return 1;
     }
 

@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-09-27
+
+### Added / Changed
+- Add custom destination folder selector, WPA2 presets (8-63 and 8-16), and ASCII printable character rule
+
+
 ## [1.0.0] - 2026-09-27
 
 ### Added

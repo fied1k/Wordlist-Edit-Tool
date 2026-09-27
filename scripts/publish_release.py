@@ -187,7 +187,7 @@ def git_commit_tag_and_push(version_str, notes=""):
         commit_msg += f" - {notes}"
 
     print(f"\n[5/6] Committing changes and creating Git tag {tag}...")
-    run_cmd(["git", "add", "version.json", "VERSION", "filter_app.py", "fastfilter.c", "fastfilter.dll", "README.md", "CHANGELOG.md"])
+    run_cmd(["git", "add", "-A"])
     run_cmd(["git", "commit", "-m", commit_msg])
     run_cmd(["git", "tag", "-a", tag, "-m", f"Release {tag}"])
 
