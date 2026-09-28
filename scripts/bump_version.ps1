@@ -3,7 +3,7 @@
     Bumps the project version, updates version metadata files, and optionally commits/tags in Git.
 
 .DESCRIPTION
-    Automates Semantic Versioning (SemVer) for WordLengthFilter.
+    Automates Semantic Versioning (SemVer) for Wordlist-Edit-Tool.
     Updates version.json, VERSION, filter_app.py, fastfilter.c, and CHANGELOG.md.
 
 .PARAMETER Bump

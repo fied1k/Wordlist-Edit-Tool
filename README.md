@@ -1,14 +1,14 @@
-# WordLengthFilter ⚡
+# Wordlist-Edit-Tool ⚡
 
-[![Release](https://img.shields.io/badge/version-v1.4.0-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/version-v1.5.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010%20(x64)-0078D6.svg?logo=windows)](#)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](#)
 [![C Engine](https://img.shields.io/badge/Engine-Native%20C%20(GCC%2016)-00599C.svg?logo=c)](#)
 [![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 
-**WordLengthFilter** is a high-performance dictionary and wordlist filtering utility for Windows. Engineered for security engineers, penetration testers, and data researchers, it processes multi-gigabyte wordlists (such as RockYou or custom password dictionaries) in seconds with a minimal memory footprint.
+**Wordlist-Edit-Tool** is a high-performance dictionary and wordlist filtering utility for Windows. Engineered for security engineers, penetration testers, and data researchers, it processes multi-gigabyte wordlists (such as RockYou or custom password dictionaries) in seconds with a minimal memory footprint.
 
-It ships as both a **standalone desktop GUI** (`WordLengthFilter.exe`) and an **ultra-fast native C CLI** (`fastfilter.exe`).
+It ships as both a **standalone desktop GUI** (`Wordlist-Edit-Tool.exe`) and an **ultra-fast native C CLI** (`fastfilter.exe`).
 
 ---
 
@@ -17,7 +17,7 @@ It ships as both a **standalone desktop GUI** (`WordLengthFilter.exe`) and an **
 ```mermaid
 flowchart TD
     subgraph Presentation ["Presentation Layer"]
-        GUI["WordLengthFilter GUI\n(Tkinter / Python 3.14)"]
+        GUI["Wordlist-Edit-Tool GUI\n(Tkinter / Python 3.14)"]
         CLI["fastfilter.exe\n(Native C CLI)"]
     end
 
@@ -81,7 +81,7 @@ flowchart TD
 
 | Binary | Type | Description |
 | :--- | :--- | :--- |
-| **`dist/WordLengthFilter.exe`** | Standalone GUI | Full desktop UI bundled with Tkinter and the embedded C acceleration engine. |
+| **`dist/Wordlist-Edit-Tool.exe`** | Standalone GUI | Full desktop UI bundled with Tkinter and the embedded C acceleration engine. |
 | **`dist/fastfilter.exe`** | Standalone CLI | Lightweight (~95 KB) zero-dependency native C command-line tool. |
 
 ---
@@ -139,7 +139,7 @@ Run the automated build script:
 This automatically compiles:
 1. `fastfilter.dll` (optimized `-O3` shared library)
 2. `dist\fastfilter.exe` (standalone CLI binary)
-3. `dist\WordLengthFilter.exe` (PyInstaller single-file bundle)
+3. `dist\Wordlist-Edit-Tool.exe` (PyInstaller single-file bundle)
 
 ---
 

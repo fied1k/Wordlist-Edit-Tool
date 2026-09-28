@@ -1,6 +1,6 @@
 @echo off
 setlocal
-title Building WordLengthFilter Standalone Executables
+title Building Wordlist-Edit-Tool Standalone Executables
 
 echo =========================================================
 echo [1/4] Compiling Native C Acceleration Engine...
@@ -50,15 +50,15 @@ echo.
 echo =========================================================
 echo [3/4] Compiling Standalone GUI Executable...
 echo =========================================================
-if exist "%~dp0WordLengthFilter.spec" (
-    python -m PyInstaller --clean -y "%~dp0WordLengthFilter.spec"
+if exist "%~dp0Wordlist-Edit-Tool.spec" (
+    python -m PyInstaller --clean -y "%~dp0Wordlist-Edit-Tool.spec"
     if %errorlevel% neq 0 (
-        py -m PyInstaller --clean -y "%~dp0WordLengthFilter.spec"
+        py -m PyInstaller --clean -y "%~dp0Wordlist-Edit-Tool.spec"
     )
 ) else (
-    python -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "WordLengthFilter" "%~dp0filter_app.py"
+    python -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
     if %errorlevel% neq 0 (
-        py -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "WordLengthFilter" "%~dp0filter_app.py"
+        py -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
     )
 )
 
@@ -73,7 +73,7 @@ echo.
 echo =========================================================
 echo [4/4] Build Complete!
 echo =========================================================
-echo Standalone GUI Executable: %~dp0dist\WordLengthFilter.exe
+echo Standalone GUI Executable: %~dp0dist\Wordlist-Edit-Tool.exe
 if exist "%~dp0dist\fastfilter.exe" (
     echo Standalone CLI Executable: %~dp0dist\fastfilter.exe
 )

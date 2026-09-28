@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Automated Iteration & Release Publisher for WordLengthFilter.
+Automated Iteration & Release Publisher for Wordlist-Edit-Tool.
 
 Performs complete end-to-end iteration release:
 1. Calculates new Semantic Version (patch/minor/major/custom).
 2. Updates version.json, VERSION, filter_app.py, fastfilter.c, and README.md.
 3. Appends new version entry to CHANGELOG.md while preserving all past version history.
-4. Compiles native C DLL (fastfilter.dll), CLI (dist/fastfilter.exe), and GUI (dist/WordLengthFilter.exe).
+4. Compiles native C DLL (fastfilter.dll), CLI (dist/fastfilter.exe), and GUI (dist/Wordlist-Edit-Tool.exe).
 5. Stores archived copy of binaries in releases/v<version>/ for permanent local history.
 6. Commits changes to Git and creates annotated tag v<version>.
 7. Pushes main and tags to GitHub.
@@ -33,7 +33,7 @@ FASTFILTER_C = os.path.join(REPO_ROOT, "fastfilter.c")
 FASTFILTER_DLL = os.path.join(REPO_ROOT, "fastfilter.dll")
 CHANGELOG_MD = os.path.join(REPO_ROOT, "CHANGELOG.md")
 README_MD = os.path.join(REPO_ROOT, "README.md")
-SPEC_FILE = os.path.join(REPO_ROOT, "WordLengthFilter.spec")
+SPEC_FILE = os.path.join(REPO_ROOT, "Wordlist-Edit-Tool.spec")
 DIST_DIR = os.path.join(REPO_ROOT, "dist")
 RELEASES_DIR = os.path.join(REPO_ROOT, "releases")
 W64DEVKIT_GCC = os.path.join(REPO_ROOT, "w64devkit", "bin", "gcc.exe")
@@ -169,11 +169,13 @@ def archive_version_locally(version_str):
     archive_dir = os.path.join(RELEASES_DIR, f"v{version_str}")
     os.makedirs(archive_dir, exist_ok=True)
 
-    gui_src = os.path.join(DIST_DIR, "WordLengthFilter.exe")
+    gui_src = os.path.join(DIST_DIR, "Wordlist-Edit-Tool.exe")
+    if not os.path.exists(gui_src):
+        gui_src = os.path.join(DIST_DIR, "WordLengthFilter.exe")
     cli_src = os.path.join(DIST_DIR, "fastfilter.exe")
 
     if os.path.exists(gui_src):
-        shutil.copy2(gui_src, os.path.join(archive_dir, "WordLengthFilter.exe"))
+        shutil.copy2(gui_src, os.path.join(archive_dir, os.path.basename(gui_src)))
     if os.path.exists(cli_src):
         shutil.copy2(cli_src, os.path.join(archive_dir, "fastfilter.exe"))
 
@@ -199,7 +201,9 @@ def publish_github_release(version_str, notes=""):
     tag = f"v{version_str}"
     print(f"\n[6/6] Publishing release {tag} on GitHub with attached standalone binaries...")
     archive_dir = os.path.join(RELEASES_DIR, tag)
-    gui_bin = os.path.join(archive_dir, "WordLengthFilter.exe")
+    gui_bin = os.path.join(archive_dir, "Wordlist-Edit-Tool.exe")
+    if not os.path.exists(gui_bin):
+        gui_bin = os.path.join(archive_dir, "WordLengthFilter.exe")
     cli_bin = os.path.join(archive_dir, "fastfilter.exe")
 
     # Extract notes for this version from CHANGELOG.md
@@ -223,13 +227,13 @@ def publish_github_release(version_str, notes=""):
     gh_cmd = [
         "gh", "release", "create", tag,
         gui_bin, cli_bin,
-        "--title", f"WordLengthFilter {tag}",
+        "--title", f"Wordlist-Edit-Tool {tag}",
         "--notes", release_notes or f"Release {tag}"
     ]
     res = run_cmd(gh_cmd, check=False)
     if res.returncode == 0:
         print(f"\n[SUCCESS] GitHub Release {tag} published successfully!")
-        print(f"URL: https://github.com/fied1k/WordLengthFilter/releases/tag/{tag}")
+        print(f"URL: https://github.com/fied1k/Wordlist-Edit-Tool/releases/tag/{tag}")
     else:
         print(f"[WARNING] gh release create returned: {res.stderr}")
 
@@ -245,7 +249,7 @@ def main():
     new_v = new_data["version"]
 
     print("=================================================================")
-    print(f" WordLengthFilter Iteration Release Pipeline: v{current_data['version']} -> v{new_v} ")
+    print(f" Wordlist-Edit-Tool Iteration Release Pipeline: v{current_data['version']} -> v{new_v} ")
     print("=================================================================")
 
     update_code_and_metadata(new_data, args.notes)
@@ -257,7 +261,7 @@ def main():
     print("\n=================================================================")
     print(f" Iteration v{new_v} has been compiled, archived, and released! ")
     print(f" - Local Archive: releases/v{new_v}/")
-    print(f" - GitHub Release: https://github.com/fied1k/WordLengthFilter/releases/tag/v{new_v}")
+    print(f" - GitHub Release: https://github.com/fied1k/Wordlist-Edit-Tool/releases/tag/v{new_v}")
     print("=================================================================")
 
 

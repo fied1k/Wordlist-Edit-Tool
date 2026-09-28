@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-28
+
+### Added / Changed
+- Rename application and repository to Wordlist-Edit-Tool, update build specs, executable naming, and release assets
+
+
 ## [1.4.0] - 2026-09-27
 
 ### Added / Changed

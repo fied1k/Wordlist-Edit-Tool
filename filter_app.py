@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.4.0"
+__version__ = "1.5.0"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
@@ -65,7 +65,7 @@ except Exception:
 class LengthFilterApp:
     def __init__(self, root):
         self.root = root
-        self.root.title(f"Word Length & Character Filter v{__version__}")
+        self.root.title(f"Wordlist-Edit-Tool v{__version__}")
         self.root.geometry("700x620")
         self.root.minsize(640, 560)
         self.root.resizable(True, True)
@@ -597,12 +597,14 @@ class LengthFilterApp:
 
         rule_prefix = f"{rule_tag}_{base}{ext}"
         rule_suffix = f"{base}_{rule_tag}{ext}"
+        tool_prefix = f"WordlistEdit_{base}{ext}"
         filtered_prefix = f"Filtered_{base}{ext}"
         classic_prefix = f"lengthfilter_{base}{ext}"
 
         return {
             "rule_prefix": rule_prefix,
             "rule_suffix": rule_suffix,
+            "tool_prefix": tool_prefix,
             "filtered": filtered_prefix,
             "classic": classic_prefix,
         }
@@ -615,6 +617,7 @@ class LengthFilterApp:
         combo_values = [
             f"Rule Prefix: {opts['rule_prefix']}",
             f"Rule Suffix: {opts['rule_suffix']}",
+            f"WordlistEdit: {opts['tool_prefix']}",
             f"Filtered: {opts['filtered']}",
             f"Classic: {opts['classic']}",
             "Custom / Manual",
@@ -634,6 +637,9 @@ class LengthFilterApp:
         elif val.startswith("Rule Suffix"):
             self.user_custom_filename = False
             self.dest_filename_var.set(opts["rule_suffix"])
+        elif val.startswith("WordlistEdit"):
+            self.user_custom_filename = False
+            self.dest_filename_var.set(opts["tool_prefix"])
         elif val.startswith("Filtered"):
             self.user_custom_filename = False
             self.dest_filename_var.set(opts["filtered"])
@@ -678,6 +684,9 @@ class LengthFilterApp:
                 if current_style.startswith("Rule Suffix"):
                     self.dest_filename_var.set(opts["rule_suffix"])
                     self.naming_style_var.set(f"Rule Suffix: {opts['rule_suffix']}")
+                elif current_style.startswith("WordlistEdit"):
+                    self.dest_filename_var.set(opts["tool_prefix"])
+                    self.naming_style_var.set(f"WordlistEdit: {opts['tool_prefix']}")
                 elif current_style.startswith("Filtered"):
                     self.dest_filename_var.set(opts["filtered"])
                     self.naming_style_var.set(f"Filtered: {opts['filtered']}")

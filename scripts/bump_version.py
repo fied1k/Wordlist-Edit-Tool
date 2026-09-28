@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Automated Version Management Script for WordLengthFilter.
+Automated Version Management Script for Wordlist-Edit-Tool.
 Updates version.json, VERSION, filter_app.py, fastfilter.c, and CHANGELOG.md.
 Optionally creates git commit and annotated tag.
 

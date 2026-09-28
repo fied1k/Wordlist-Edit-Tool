@@ -7,7 +7,7 @@
 #include <wchar.h>
 #endif
 
-#define FASTFILTER_VERSION "1.4.0"
+#define FASTFILTER_VERSION "1.5.0"
 #define BUF_SIZE (1024 * 1024 * 4) // 4 MB I/O streaming buffer
 
 // 64-bit FNV-1a Hash (Case-insensitive for standard words)
@@ -505,7 +505,7 @@ int main(int argc, char **argv) {
     }
 
     if (argc < 3) {
-        printf("WordLengthFilter CLI v%s (Fast Native Engine)\n", FASTFILTER_VERSION);
+        printf("Wordlist-Edit-Tool CLI v%s (Fast Native Engine)\n", FASTFILTER_VERSION);
         printf("Usage: fastfilter.exe <source_file> <output_file> [min_len] [max_len] [charset_mode] [output_mode] [dedup] [split_lines] [split_bytes]\n\n");
         printf("Arguments:\n");
         printf("  <source_file>   Path to source text / wordlist file\n");
@@ -533,7 +533,7 @@ int main(int argc, char **argv) {
     long long split_lines = argc > 8 ? atoll(argv[8]) : 0;
     long long split_bytes = argc > 9 ? atoll(argv[9]) : 0;
 
-    printf("[WordLengthFilter] Processing '%s' -> '%s'...\n", src, dst);
+    printf("[Wordlist-Edit-Tool] Processing '%s' -> '%s'...\n", src, dst);
     printf("Settings: min=%d, max=%d, charset=%d, mode=%d, dedup=%d, split_lines=%lld, split_bytes=%lld\n",
            min_len, max_len, charset_mode, output_mode, dedup, split_lines, split_bytes);
 

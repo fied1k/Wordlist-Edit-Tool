@@ -1,4 +1,4 @@
-# WordLengthFilter Project Guidelines & Automation Rules
+# Wordlist-Edit-Tool Project Guidelines & Automation Rules
 
 ## 1. Iteration & Release Policy
 Whenever modifications, features, optimizations, or bug fixes are made to this codebase:

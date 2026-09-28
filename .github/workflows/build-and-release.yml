@@ -43,7 +43,7 @@ jobs:
       - name: Build Standalone GUI Executable (PyInstaller)
         shell: powershell
         run: |
-          python -m PyInstaller --clean -y WordLengthFilter.spec
+          python -m PyInstaller --clean -y Wordlist-Edit-Tool.spec
 
       - name: Verify Compiled Binaries
         shell: powershell
@@ -54,9 +54,9 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wordlengthfilter-windows-binaries
+          name: wordlist-edit-tool-windows-binaries
           path: |
-            dist/WordLengthFilter.exe
+            dist/Wordlist-Edit-Tool.exe
             dist/fastfilter.exe
 
       - name: Create GitHub Release
@@ -64,7 +64,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/WordLengthFilter.exe
+            dist/Wordlist-Edit-Tool.exe
             dist/fastfilter.exe
           generate_release_notes: true
           draft: false

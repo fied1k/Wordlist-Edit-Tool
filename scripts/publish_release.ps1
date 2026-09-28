@@ -6,10 +6,10 @@
     Automates the full iteration release lifecycle:
     1. Bumps semantic version in version.json, VERSION, filter_app.py, fastfilter.c, and README.md.
     2. Updates CHANGELOG.md with release notes while keeping all previous versions archived.
-    3. Compiles fastfilter.dll, dist\fastfilter.exe, and dist\WordLengthFilter.exe.
+    3. Compiles fastfilter.dll, dist\fastfilter.exe, and dist\Wordlist-Edit-Tool.exe.
     4. Copies and preserves the versioned binaries in releases\vX.Y.Z\.
     5. Commits to Git, tags vX.Y.Z, and pushes to remote GitHub repository.
-    6. Publishes a GitHub Release with WordLengthFilter.exe and fastfilter.exe attached.
+    6. Publishes a GitHub Release with Wordlist-Edit-Tool.exe and fastfilter.exe attached.
 
 .PARAMETER Bump
     The version bump: 'patch' (default), 'minor', 'major', or specific version (e.g. '1.1.0').
