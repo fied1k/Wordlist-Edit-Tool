@@ -1,6 +1,6 @@
 # Wordlist-Edit-Tool ⚡
 
-[![Release](https://img.shields.io/badge/version-v1.5.0-blue.svg)](CHANGELOG.md)
+[![Release](https://img.shields.io/badge/version-v1.6.0-blue.svg)](CHANGELOG.md)
 [![Platform](https://img.shields.io/badge/Platform-Windows%2011%20%7C%2010%20(x64)-0078D6.svg?logo=windows)](#)
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB.svg?logo=python&logoColor=white)](#)
 [![C Engine](https://img.shields.io/badge/Engine-Native%20C%20(GCC%2016)-00599C.svg?logo=c)](#)

@@ -8,7 +8,7 @@ import time
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
-__version__ = "1.5.0"
+__version__ = "1.6.0"
 
 # Determine directory (handles development mode and PyInstaller extracted _MEIPASS bundle)
 BASE_DIR = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))

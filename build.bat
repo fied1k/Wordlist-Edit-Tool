@@ -2,8 +2,13 @@
 setlocal
 title Building Wordlist-Edit-Tool Standalone Executables
 
+REM Parse options: --clean or -c for fresh PyInstaller build
+set "CLEAN_FLAG="
+if "%~1"=="--clean" set "CLEAN_FLAG=--clean"
+if "%~1"=="-c" set "CLEAN_FLAG=--clean"
+
 echo =========================================================
-echo [1/4] Compiling Native C Acceleration Engine...
+echo [1/3] Compiling Native C Acceleration Engine...
 echo =========================================================
 
 REM Check for GCC in local w64devkit or system PATH
@@ -39,26 +44,38 @@ if %errorlevel% neq 0 (
 :PYINSTALLER_STEP
 echo.
 echo =========================================================
-echo [2/4] Ensuring PyInstaller is ready...
+echo [2/3] Checking PyInstaller...
 echo =========================================================
-python -m pip install --upgrade pyinstaller >nul 2>&1
+python -c "import PyInstaller" >nul 2>&1
 if %errorlevel% neq 0 (
-    py -m pip install --upgrade pyinstaller >nul 2>&1
+    echo Installing PyInstaller...
+    python -m pip install pyinstaller >nul 2>&1
+    if %errorlevel% neq 0 (
+        py -m pip install pyinstaller >nul 2>&1
+    )
+) else (
+    echo PyInstaller is ready (cached).
 )
 
 echo.
 echo =========================================================
-echo [3/4] Compiling Standalone GUI Executable...
+echo [3/3] Compiling Standalone GUI Executable...
 echo =========================================================
+if defined CLEAN_FLAG (
+    echo Running clean PyInstaller build...
+) else (
+    echo Running fast incremental PyInstaller build (pass --clean for fresh build)...
+)
+
 if exist "%~dp0Wordlist-Edit-Tool.spec" (
-    python -m PyInstaller --clean -y "%~dp0Wordlist-Edit-Tool.spec"
+    python -m PyInstaller %CLEAN_FLAG% -y "%~dp0Wordlist-Edit-Tool.spec"
     if %errorlevel% neq 0 (
-        py -m PyInstaller --clean -y "%~dp0Wordlist-Edit-Tool.spec"
+        py -m PyInstaller %CLEAN_FLAG% -y "%~dp0Wordlist-Edit-Tool.spec"
     )
 ) else (
-    python -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
+    python -m PyInstaller %CLEAN_FLAG% -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
     if %errorlevel% neq 0 (
-        py -m PyInstaller --clean -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
+        py -m PyInstaller %CLEAN_FLAG% -y --onefile --noconsole --add-binary "fastfilter.dll;." --name "Wordlist-Edit-Tool" "%~dp0filter_app.py"
     )
 )
 
@@ -71,7 +88,7 @@ if %errorlevel% neq 0 (
 
 echo.
 echo =========================================================
-echo [4/4] Build Complete!
+echo Build Complete!
 echo =========================================================
 echo Standalone GUI Executable: %~dp0dist\Wordlist-Edit-Tool.exe
 if exist "%~dp0dist\fastfilter.exe" (

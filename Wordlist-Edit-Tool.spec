@@ -9,9 +9,21 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=[
+        'unittest',
+        'pydoc',
+        'pydoc_data',
+        'xmlrpc',
+        'ftplib',
+        'tarfile',
+        'test',
+        'distutils',
+        'email',
+        'http.server',
+        'sqlite3',
+    ],
     noarchive=False,
-    optimize=0,
+    optimize=1,
 )
 pyz = PYZ(a.pure)
 

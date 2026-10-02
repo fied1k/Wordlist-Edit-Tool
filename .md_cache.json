@@ -1,0 +1,55 @@
+{
+  "version": "1.0",
+  "updated_at": "2026-10-01T23:20:36.398349",
+  "files": {
+    "README.md": {
+      "rel_path": "README.md",
+      "size": 8529,
+      "mtime": 1790914836.3590972,
+      "mtime_str": "2026-10-01 23:20:36",
+      "sha256": "fda25f54a5be50e0",
+      "line_count": 167,
+      "badge_version": "1.6.0",
+      "summary": "Wordlist-Edit-Tool documentation & CLI/GUI guide (v1.6.0)."
+    },
+    "CHANGELOG.md": {
+      "rel_path": "CHANGELOG.md",
+      "size": 3873,
+      "mtime": 1790914836.3610976,
+      "mtime_str": "2026-10-01 23:20:36",
+      "sha256": "3598ac59c8d5051e",
+      "line_count": 74,
+      "latest_version": "1.6.0",
+      "latest_date": "2026-10-01",
+      "latest_notes_summary": "### Added / Changed | - Add Markdown cache and token-saving system (md_cache.py), speed up build pipeline, remove legacy name references, and update local path to C:\\Users\\pcpro\\Dropbox\\App-Development\\Wordlist-Edit-Tool",
+      "summary": "Release history through v1.6.0 (2026-10-01)."
+    },
+    "GEMINI.md": {
+      "rel_path": "GEMINI.md",
+      "size": 1264,
+      "mtime": 1790914770.2857492,
+      "mtime_str": "2026-10-01 23:19:30",
+      "sha256": "ad8449ce45dd82e0",
+      "line_count": 17,
+      "summary": "Automation rules: Always formal release, auto SemVer, preserve changelog, local binary archival."
+    },
+    "AGENTS.md": {
+      "rel_path": "AGENTS.md",
+      "size": 4230,
+      "mtime": 1790914617.0959918,
+      "mtime_str": "2026-10-01 23:16:57",
+      "sha256": "40e94456b00306f1",
+      "line_count": 82,
+      "summary": "Agent architecture, build instructions, token efficiency rules, and conventions."
+    },
+    "releases/README.md": {
+      "rel_path": "releases/README.md",
+      "size": 543,
+      "mtime": 1790594185.7979825,
+      "mtime_str": "2026-09-28 06:16:25",
+      "sha256": "44a615f1240dbb49",
+      "line_count": 15,
+      "summary": "Directory index for local standalone binary archives (v1.0.0 through v1.5.0+)."
+    }
+  }
+}

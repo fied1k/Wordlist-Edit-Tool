@@ -146,6 +146,17 @@ def update_code_and_metadata(new_data, notes=""):
             with open(CHANGELOG_MD, "w", encoding="utf-8") as f:
                 f.write(changelog_text)
 
+    # Sync markdown cache (.md_cache.json)
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        if script_dir not in sys.path:
+            sys.path.insert(0, script_dir)
+        import md_cache
+        md_cache.scan_and_update(force=True)
+        print("  -> Synchronized .md_cache.json")
+    except Exception as e:
+        pass
+
 
 def compile_binaries():
     print("\n[2/6] Compiling native C acceleration engine...")
@@ -170,12 +181,10 @@ def archive_version_locally(version_str):
     os.makedirs(archive_dir, exist_ok=True)
 
     gui_src = os.path.join(DIST_DIR, "Wordlist-Edit-Tool.exe")
-    if not os.path.exists(gui_src):
-        gui_src = os.path.join(DIST_DIR, "WordLengthFilter.exe")
     cli_src = os.path.join(DIST_DIR, "fastfilter.exe")
 
     if os.path.exists(gui_src):
-        shutil.copy2(gui_src, os.path.join(archive_dir, os.path.basename(gui_src)))
+        shutil.copy2(gui_src, os.path.join(archive_dir, "Wordlist-Edit-Tool.exe"))
     if os.path.exists(cli_src):
         shutil.copy2(cli_src, os.path.join(archive_dir, "fastfilter.exe"))
 
@@ -202,8 +211,6 @@ def publish_github_release(version_str, notes=""):
     print(f"\n[6/6] Publishing release {tag} on GitHub with attached standalone binaries...")
     archive_dir = os.path.join(RELEASES_DIR, tag)
     gui_bin = os.path.join(archive_dir, "Wordlist-Edit-Tool.exe")
-    if not os.path.exists(gui_bin):
-        gui_bin = os.path.join(archive_dir, "WordLengthFilter.exe")
     cli_bin = os.path.join(archive_dir, "fastfilter.exe")
 
     # Extract notes for this version from CHANGELOG.md

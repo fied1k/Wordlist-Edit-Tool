@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-01
+
+### Added / Changed
+- Add Markdown cache and token-saving system (md_cache.py), speed up build pipeline, remove legacy name references, and update local path to C:\Users\pcpro\Dropbox\App-Development\Wordlist-Edit-Tool
+
+
 ## [1.5.0] - 2026-09-28
 
 ### Added / Changed
